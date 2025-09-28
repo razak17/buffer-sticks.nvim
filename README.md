@@ -47,8 +47,10 @@ require("buffer-sticks").setup({
   inactive_char = " ─",         -- Character for inactive buffers
   transparent = true,           -- Transparent background
   -- winblend = 100,                 -- Window transparency (0-100, overrides transparent)
-  -- filter_filetypes = { "terminal" },  -- Exclude terminal buffers (also: "NvimTree", "help", "qf", "neo-tree", "Trouble")
-  -- filter_names = { ".*%.git/.*", "^/tmp/.*" },   -- Exclude buffers matching lua patterns
+  -- filter = {
+  --   filetypes = { "terminal" },    -- Exclude terminal buffers (also: "NvimTree", "help", "qf", "neo-tree", "Trouble")
+  --   names = { ".*%.git/.*", "^/tmp/.*" },  -- Exclude buffers matching lua patterns
+  -- },
   highlights = {
     active = { fg = "#ffffff" },
     inactive = { fg = "#666666" }

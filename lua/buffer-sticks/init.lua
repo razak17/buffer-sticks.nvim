@@ -28,6 +28,10 @@ local state = {
 ---@field x number Horizontal offset from default position
 ---@field y number Vertical offset from default position
 
+---@class BufferSticksFilter
+---@field filetypes? string[] List of filetypes to exclude from buffer sticks
+---@field names? string[] List of buffer name patterns to exclude (supports lua patterns)
+
 ---@class BufferSticksConfig
 ---@field position "left"|"right" Position of the buffer sticks on screen
 ---@field width number Width of the floating window
@@ -36,8 +40,7 @@ local state = {
 ---@field inactive_char string Character to display for inactive buffers
 ---@field transparent boolean Whether the background should be transparent
 ---@field winblend? number Window blend/transparency level (0-100, overrides transparent)
----@field filter_filetypes? string[] List of filetypes to exclude from buffer sticks
----@field filter_names? string[] List of buffer name patterns to exclude (supports lua patterns)
+---@field filter? BufferSticksFilter Filter configuration for excluding buffers
 ---@field highlights table<string, BufferSticksHighlights> Highlight groups for active/inactive states
 local config = {
 	position = "right", -- "left" or "right"
@@ -70,8 +73,8 @@ local function get_buffer_list()
 			local should_include = true
 
 			-- Filter by filetype
-			if config.filter_filetypes then
-				for _, ft in ipairs(config.filter_filetypes) do
+			if config.filter and config.filter.filetypes then
+				for _, ft in ipairs(config.filter.filetypes) do
 					if buf_filetype == ft then
 						should_include = false
 						break
@@ -80,8 +83,8 @@ local function get_buffer_list()
 			end
 
 			-- Filter by buffer name patterns
-			if should_include and config.filter_names then
-				for _, pattern in ipairs(config.filter_names) do
+			if should_include and config.filter and config.filter.names then
+				for _, pattern in ipairs(config.filter.names) do
 					if buf_name:match(pattern) then
 						should_include = false
 						break

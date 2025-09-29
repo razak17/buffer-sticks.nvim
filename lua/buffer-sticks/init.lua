@@ -37,6 +37,7 @@ local state = {
 
 ---@class BufferSticksFilter
 ---@field filetypes? string[] List of filetypes to exclude from buffer sticks
+---@field buftypes? string[] List of buftypes to exclude from buffer sticks (e.g., "terminal", "help", "quickfix")
 ---@field names? string[] List of buffer name patterns to exclude (supports lua patterns)
 
 ---@class BufferSticksConfig
@@ -209,6 +210,17 @@ local function get_buffer_list()
 			if config.filter and config.filter.filetypes then
 				for _, ft in ipairs(config.filter.filetypes) do
 					if buf_filetype == ft then
+						should_include = false
+						break
+					end
+				end
+			end
+
+			-- Filter by buftype
+			if should_include and config.filter and config.filter.buftypes then
+				local buf_buftype = vim.bo[buf].buftype
+				for _, bt in ipairs(config.filter.buftypes) do
+					if buf_buftype == bt then
 						should_include = false
 						break
 					end

@@ -29,6 +29,12 @@ local state = {
 ---@field x integer Horizontal offset from default position
 ---@field y integer Vertical offset from default position
 
+---@class BufferSticksPadding
+---@field top integer Top padding inside the window
+---@field right integer Right padding inside the window
+---@field bottom integer Bottom padding inside the window
+---@field left integer Left padding inside the window
+
 ---@class BufferSticksJump
 ---@field show string[] What to show in jump mode: "filename", "space", "label", "stick"
 
@@ -42,6 +48,7 @@ local state = {
 
 ---@class BufferSticksConfig
 ---@field offset BufferSticksOffset Position offset for fine-tuning
+---@field padding BufferSticksPadding Padding inside the window
 ---@field active_char string Character to display for the active buffer
 ---@field inactive_char string Character to display for inactive buffers
 ---@field transparent boolean Whether the background should be transparent
@@ -51,7 +58,8 @@ local state = {
 ---@field filter? BufferSticksFilter Filter configuration for excluding buffers
 ---@field highlights table<string, BufferSticksHighlights> Highlight groups for active/inactive/label states
 local config = {
-	offset = { x = 1, y = 0 },
+	offset = { x = 0, y = 0 },
+	padding = { top = 0, right = 1, bottom = 0, left = 1 },
 	active_char = "──",
 	inactive_char = " ─",
 	transparent = true,
@@ -272,10 +280,36 @@ local function right_align_lines(lines, width)
 	for _, line in ipairs(lines) do
 		local content_width = vim.fn.strwidth(line)
 		local padding = width - content_width
-		local aligned_line = string.rep(" ", math.max(0, padding)) .. line
+		local aligned_line = string.rep(" ", math.max(0, config.padding.left + padding))
+			.. line
+			.. string.rep(" ", math.max(0, config.padding.right))
 		table.insert(aligned_lines, aligned_line)
 	end
 	return aligned_lines
+end
+
+---Apply vertical padding (top and bottom) to lines
+---@param lines string[] Lines to add vertical padding to
+---@return string[] padded_lines Lines with top and bottom padding applied
+local function vertical_align_lines(lines)
+	local padded_lines = {}
+
+	-- Add top padding (empty lines)
+	for _ = 1, config.padding.top do
+		table.insert(padded_lines, lines[1] and string.rep(" ", vim.fn.strwidth(lines[1])) or "")
+	end
+
+	-- Add original content lines
+	for _, line in ipairs(lines) do
+		table.insert(padded_lines, line)
+	end
+
+	-- Add bottom padding (empty lines)
+	for _ = 1, config.padding.bottom do
+		table.insert(padded_lines, lines[1] and string.rep(" ", vim.fn.strwidth(lines[1])) or "")
+	end
+
+	return padded_lines
 end
 
 ---Calculate the required width based on current display mode and content
@@ -364,8 +398,12 @@ end
 ---@return WindowInfo window_info Information about the window and buffer
 local function create_or_update_floating_window()
 	local buffers = get_buffer_list()
-	local height = math.max(#buffers, 1)
-	local width = calculate_required_width()
+	local content_height = math.max(#buffers, 1)
+	local content_width = calculate_required_width()
+
+	-- Add padding to window dimensions
+	local height = content_height + config.padding.top + config.padding.bottom
+	local width = content_width + config.padding.left + config.padding.right
 
 	-- Position on the right side of the screen
 	local col = vim.o.columns - width - config.offset.x
@@ -492,14 +530,19 @@ local function render_buffers()
 	end
 
 	-- Right-align content within the window
+	window_width = calculate_required_width()
 	local aligned_lines = right_align_lines(lines, window_width)
+
+	-- Apply vertical padding
+	local final_lines = vertical_align_lines(aligned_lines)
+
 	local ns_id = vim.api.nvim_create_namespace("BufferSticks")
-	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, aligned_lines)
+	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, final_lines)
 
 	-- Set highlights
 	for i, buffer in ipairs(buffers) do
-		local line_idx = i - 1
-		local line_content = aligned_lines[i]
+		local line_idx = i - 1 + config.padding.top -- Account for top padding
+		local line_content = final_lines[i + config.padding.top] -- Access content from final padded lines
 
 		-- In jump mode, apply specific highlighting for different parts
 		if state.jump_mode and config.jump and config.jump.show then
@@ -627,7 +670,6 @@ local function jump()
 			render_buffers()
 			return
 		end
-
 
 		-- Handle regular character input
 		if char_str:match("%w") then

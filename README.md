@@ -12,6 +12,7 @@ Jump mode for quick buffer navigation:
 
 - Visual representation of open buffers
 - Highlights the currently active buffer
+- Jump mode for quick buffer navigation by typing characters
 - Configurable positioning and appearance
 - Transparent background support
 - Persists highlight configuration across colorscheme changes

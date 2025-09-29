@@ -2,11 +2,11 @@
 
 A neovim plugin that displays a vertical indicator showing open buffers.
 
-![Demo](demo.png)
+![Demo](assets/demo.png)
 
 Jump mode for quick buffer navigation:
 
-![Jump Demo](jump-demo.png)
+![Jump Demo](assets/jump-demo.png)
 
 ## Features
 

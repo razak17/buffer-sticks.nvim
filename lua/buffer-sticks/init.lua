@@ -90,75 +90,99 @@ end
 ---@param buffers BufferInfo[] List of buffers to generate labels for
 ---@return BufferInfo[] buffers List of buffers with unique labels assigned
 local function generate_unique_labels(buffers)
-	---@type table<integer, string>
 	local labels = {}
-	---@type table<string, boolean>
 	local used_labels = {}
-	---@type string[]
 	local filename_map = {}
+	local collision_groups = {}
 
-	-- Phase 1: Extract filenames and prepare data
+	-- Phase 1: Extract filenames and group by first character
 	for _, buffer in ipairs(buffers) do
 		local filename = vim.fn.fnamemodify(buffer.name, ":t")
 		if filename == "" then
 			filename = "?"
 		end
 		filename_map[buffer.id] = filename:lower()
-	end
 
-	-- Phase 2: Assign single character labels where possible
-	for _, buffer in ipairs(buffers) do
-		local filename = filename_map[buffer.id]
-		local first_char = filename:sub(1, 1)
-		if first_char:match("%w") and not used_labels[first_char] then
-			labels[buffer.id] = first_char
-			used_labels[first_char] = true
+		local first_char = filename:sub(1, 1):lower()
+		if first_char:match("%w") then
+			if not collision_groups[first_char] then
+				collision_groups[first_char] = {}
+			end
+			table.insert(collision_groups[first_char], buffer)
 		end
 	end
 
-	-- Phase 3: Resolve conflicts with two-character labels
-	for _, buffer in ipairs(buffers) do
-		if not labels[buffer.id] then -- Still needs a label
-			local filename = filename_map[buffer.id]
-			local found_label = false
+	-- Phase 2: Assign labels based on collision detection
+	for first_char, group in pairs(collision_groups) do
+		if #group == 1 then
+			-- No collision: use single character
+			local buffer = group[1]
+			labels[buffer.id] = first_char
+			used_labels[first_char] = true
+		else
+			-- Collision detected: ALL buffers in this group get two-character labels
+			for _, buffer in ipairs(group) do
+				local filename = filename_map[buffer.id]
+				local found_label = false
 
-			-- Try first two characters
-			if #filename >= 2 then
-				local two_char = filename:sub(1, 2)
-				if two_char:match("^%w%w$") and not used_labels[two_char] then
-					labels[buffer.id] = two_char
-					used_labels[two_char] = true
-					found_label = true
-				else
-					-- Try alternative combinations: first + other chars
-					local first_char = filename:sub(1, 1)
-					if first_char:match("%w") then
-						for i = 2, math.min(#filename, 5) do
-							local second_char = filename:sub(i, i)
-							if second_char:match("%w") then
-								local alt_label = first_char .. second_char
-								if not used_labels[alt_label] then
-									labels[buffer.id] = alt_label
-									used_labels[alt_label] = true
-									found_label = true
-									break
-								end
+				-- Try first two characters
+				if #filename >= 2 then
+					local two_char = filename:sub(1, 2)
+					if two_char:match("^%w%w$") and not used_labels[two_char] then
+						labels[buffer.id] = two_char
+						used_labels[two_char] = true
+						found_label = true
+					end
+				end
+
+				-- If first two chars didn't work, try first char + other chars
+				if not found_label and first_char:match("%w") then
+					for i = 2, math.min(#filename, 5) do
+						local second_char = filename:sub(i, i)
+						if second_char:match("%w") then
+							local alt_label = first_char .. second_char
+							if not used_labels[alt_label] then
+								labels[buffer.id] = alt_label
+								used_labels[alt_label] = true
+								found_label = true
+								break
 							end
 						end
 					end
 				end
-			end
 
-			-- Phase 4: Fallback to sequential letters
-			if not found_label then
-				local base_char = ("a"):byte()
-				for i = 0, 25 do
-					local fallback_char = string.char(base_char + i)
-					if not used_labels[fallback_char] then
-						labels[buffer.id] = fallback_char
-						used_labels[fallback_char] = true
-						break
+				-- Fallback: use sequential two-character combinations
+				if not found_label then
+					local base_char = string.byte("a")
+					for i = 0, 25 do
+						for j = 0, 25 do
+							local fallback_label = string.char(base_char + i) .. string.char(base_char + j)
+							if not used_labels[fallback_label] then
+								labels[buffer.id] = fallback_label
+								used_labels[fallback_label] = true
+								found_label = true
+								break
+							end
+						end
+						if found_label then
+							break
+						end
 					end
+				end
+			end
+		end
+	end
+
+	-- Phase 3: Handle buffers that don't start with word characters
+	for _, buffer in ipairs(buffers) do
+		if not labels[buffer.id] then
+			local base_char = string.byte("a")
+			for i = 0, 25 do
+				local fallback_char = string.char(base_char + i)
+				if not used_labels[fallback_char] then
+					labels[buffer.id] = fallback_char
+					used_labels[fallback_char] = true
+					break
 				end
 			end
 		end
@@ -483,7 +507,13 @@ local function render_buffers()
 			if show_stick then
 				local stick_width = vim.fn.strwidth(buffer.is_current and config.active_char or config.inactive_char)
 				local hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
-				vim.hl.range(state.buf, ns_id, hl_group, { line_idx, col_offset }, {line_idx, col_offset + stick_width })
+				vim.hl.range(
+					state.buf,
+					ns_id,
+					hl_group,
+					{ line_idx, col_offset },
+					{ line_idx, col_offset + stick_width }
+				)
 				col_offset = col_offset + stick_width
 			end
 
@@ -519,7 +549,13 @@ local function render_buffers()
 				if label_start_pos then
 					local byte_start = col_offset + label_start_pos - 1 -- Convert to absolute byte position
 					local byte_end = byte_start + #buffer.label -- Byte length, not display width
-					vim.hl.range(state.buf, ns_id, "BufferSticksLabel", { line_idx, byte_start }, { line_idx, byte_end })
+					vim.hl.range(
+						state.buf,
+						ns_id,
+						"BufferSticksLabel",
+						{ line_idx, byte_start },
+						{ line_idx, byte_end }
+					)
 				end
 			end
 		else

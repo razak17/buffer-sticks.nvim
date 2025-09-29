@@ -119,7 +119,6 @@ Jump mode allows you to quickly navigate to buffers by typing their first charac
 2. Type the first character of the buffer you want to jump to
 3. If multiple buffers match, continue typing more characters
 4. Press `Esc` or `Ctrl-C` to cancel
-5. Use `Backspace` to correct input
 
 **Label Display Options:**
 - `label = { show = "always" }` - Always show buffer name labels

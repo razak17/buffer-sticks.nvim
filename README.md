@@ -57,7 +57,7 @@ return {
 		},
 	},
 	config = function()
-		local stick = require("buffer-sticks.nvim")
+		local stick = require("buffer-sticks")
 		stick.setup({
 			filter_filetypes = { "terminal" },
 			highlights = {

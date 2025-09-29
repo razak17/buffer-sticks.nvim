@@ -21,6 +21,8 @@ local state = {
 	jump_input = "",
 	cached_buffer_ids = {},
 	cached_labels = {},
+	auto_hidden = false,
+	win_pos = { col = 0, row = 0, width = 0, height = 0 },
 }
 
 ---@alias BufferSticksHighlights vim.api.keyset.highlight
@@ -53,6 +55,7 @@ local state = {
 ---@field inactive_char string Character to display for inactive buffers
 ---@field transparent boolean Whether the background should be transparent
 ---@field winblend? number Window blend level (0-100)
+---@field auto_hide boolean Auto-hide when cursor is over float
 ---@field label? BufferSticksLabel Label display configuration
 ---@field jump? BufferSticksJump Jump mode configuration
 ---@field filter? BufferSticksFilter Filter configuration for excluding buffers
@@ -63,6 +66,7 @@ local config = {
 	active_char = "──",
 	inactive_char = " ─",
 	transparent = true,
+	auto_hide = true,
 	label = { show = "jump" },
 	jump = { show = { "filename", "space", "label" } },
 	highlights = {
@@ -394,6 +398,63 @@ end
 ---@field buf number Buffer handle
 ---@field win number Window handle
 
+---Check if cursor position is within the floating window bounds
+---@return boolean collision True if cursor is within the window area
+local function check_cursor_collision()
+	-- If auto_hide is disabled, no collision detection needed
+	if not config.auto_hide then
+		return false
+	end
+
+	-- If we don't have valid window position data, no collision
+	if state.win_pos.width == 0 or state.win_pos.height == 0 then
+		return false
+	end
+
+	-- Get screen cursor position
+	-- Convert to 0-based like window coordinates
+	local cursor_row = vim.fn.screenrow() - 1
+	local cursor_col = vim.fn.screencol() - 1
+
+	-- Use a small consistent offset for collision detection
+	local offset = 1
+
+	-- Check if cursor is within floating window bounds (regardless of window validity)
+	return cursor_col >= state.win_pos.col - offset
+		and cursor_col < state.win_pos.col + state.win_pos.width + offset
+		and cursor_row >= state.win_pos.row - offset
+		and cursor_row < state.win_pos.row + state.win_pos.height + offset
+end
+
+---Handle cursor movement for auto-hide behavior
+local function handle_cursor_move()
+	-- Only handle auto-hide if auto_hide is enabled and we're visible (or auto-hidden)
+	if not config.auto_hide or state.jump_mode then
+		return
+	end
+
+	-- If we're not visible and not auto-hidden, nothing to do
+	if not state.visible and not state.auto_hidden then
+		return
+	end
+
+	local collision = check_cursor_collision()
+	local cursor_row = vim.fn.screenrow() - 1
+	local cursor_col = vim.fn.screencol() - 1
+
+	if collision and state.visible and not state.auto_hidden then
+		-- Cursor entered float area, hide it immediately
+		state.auto_hidden = true
+		if vim.api.nvim_win_is_valid(state.win) then
+			vim.api.nvim_win_hide(state.win)
+		end
+	elseif not collision and state.auto_hidden then
+		-- Cursor left float area, show it immediately
+		state.auto_hidden = false
+		M.show()
+	end
+end
+
 ---Create or update the floating window for buffer sticks
 ---@return WindowInfo window_info Information about the window and buffer
 local function create_or_update_floating_window()
@@ -440,6 +501,9 @@ local function create_or_update_floating_window()
 	else
 		state.win = vim.api.nvim_open_win(state.buf, false, win_config)
 	end
+
+	-- Store window position for collision detection
+	state.win_pos = { col = col, row = row, width = width, height = height }
 
 	---@type vim.api.keyset.option
 	local win_opts = { win = state.win }
@@ -632,6 +696,8 @@ function M.show()
 	create_or_update_floating_window()
 	render_buffers()
 	state.visible = true
+	state.auto_hidden = false -- Reset auto-hide state when manually shown
+
 end
 
 ---Hide the buffer sticks floating window
@@ -642,6 +708,7 @@ function M.hide()
 		state.win = -1
 	end
 	state.visible = false
+	state.auto_hidden = false -- Reset auto-hide state when manually hidden
 end
 
 ---Enter jump mode to navigate buffers by typing characters
@@ -810,6 +877,19 @@ function M.setup(opts)
 		callback = function()
 			if state.visible then
 				vim.schedule(M.show) -- Refresh the display and position
+			end
+		end,
+	})
+
+	-- Handle cursor movement for auto-hide behavior
+	vim.api.nvim_create_autocmd({
+		"CursorMoved", "CursorMovedI", "CursorHold", "CursorHoldI",
+		"WinScrolled", "ModeChanged", "SafeState"
+	}, {
+		group = augroup,
+		callback = function()
+			if config.auto_hide then
+				handle_cursor_move()
 			end
 		end,
 	})

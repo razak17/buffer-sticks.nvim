@@ -628,25 +628,6 @@ local function jump()
 			return
 		end
 
-		-- Handle backspace
-		if vim.list_contains({ 8, 127 }, char) then
-			if #state.jump_input > 0 then
-				state.jump_input = state.jump_input:sub(1, -2)
-				if #state.jump_input == 0 then
-					state.jump_mode = false
-					create_or_update_floating_window() -- Resize back to normal mode
-					render_buffers()
-					return
-				end
-				render_buffers()
-				vim.defer_fn(handle_input, 0)
-			else
-				state.jump_mode = false
-				create_or_update_floating_window() -- Resize back to normal mode
-				render_buffers()
-			end
-			return
-		end
 
 		-- Handle regular character input
 		if char_str:match("%w") then

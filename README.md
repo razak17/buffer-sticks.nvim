@@ -41,6 +41,30 @@ use {
 }
 ```
 
+### Quick Setup
+
+```lua
+return {
+  "ahkohd/buffer-sticks.nvim",
+  event = "VeryLazy",
+  config = function()
+    require("buffer-sticks").setup({
+      filter = {
+        filetypes = { "terminal" },
+      },
+      highlights = {
+        active = { link = "Statement" },
+        inactive = { link = "Whitespace" },
+        label = { link = "Comment" },
+      },
+    })
+  end,
+  keys = {
+    { "<leader>j", function() require("buffer-sticks").jump() end, desc = "Buffer jump mode" },
+  },
+}
+```
+
 ## Configuration
 
 ```lua

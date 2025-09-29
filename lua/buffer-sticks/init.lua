@@ -755,11 +755,6 @@ function M.setup(opts)
 		hide = hide,
 		jump = jump,
 	}
-
-	-- Create user command
-	vim.api.nvim_create_user_command("BufferSticks", function()
-		toggle()
-	end, { desc = "Toggle buffer stick visualization" })
 end
 
 -- Expose functions for direct access

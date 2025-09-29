@@ -275,10 +275,10 @@ local function calculate_required_width()
 	-- Calculate based on current display mode
 	if state.jump_mode and config.jump and config.jump.show then
 		-- Jump mode: calculate based on jump.show config
-		local show_filename = vim.tbl_contains(config.jump.show, "filename")
-		local show_space = vim.tbl_contains(config.jump.show, "space")
-		local show_label = vim.tbl_contains(config.jump.show, "label")
-		local show_stick = vim.tbl_contains(config.jump.show, "stick")
+		local show_filename = vim.list_contains(config.jump.show, "filename")
+		local show_space = vim.list_contains(config.jump.show, "space")
+		local show_label = vim.list_contains(config.jump.show, "label")
+		local show_stick = vim.list_contains(config.jump.show, "stick")
 
 		local total_width = 0
 
@@ -433,10 +433,10 @@ local function render_buffers()
 
 		-- In jump mode, use jump.show configuration
 		if state.jump_mode and config.jump and config.jump.show then
-			local show_filename = vim.tbl_contains(config.jump.show, "filename")
-			local show_space = vim.tbl_contains(config.jump.show, "space")
-			local show_label = vim.tbl_contains(config.jump.show, "label")
-			local show_stick = vim.tbl_contains(config.jump.show, "stick")
+			local show_filename = vim.list_contains(config.jump.show, "filename")
+			local show_space = vim.list_contains(config.jump.show, "space")
+			local show_label = vim.list_contains(config.jump.show, "label")
+			local show_stick = vim.list_contains(config.jump.show, "stick")
 
 			local parts = {}
 
@@ -491,10 +491,10 @@ local function render_buffers()
 
 		-- In jump mode, apply specific highlighting for different parts
 		if state.jump_mode and config.jump and config.jump.show then
-			local show_filename = vim.tbl_contains(config.jump.show, "filename")
-			local show_space = vim.tbl_contains(config.jump.show, "space")
-			local show_label = vim.tbl_contains(config.jump.show, "label")
-			local show_stick = vim.tbl_contains(config.jump.show, "stick")
+			local show_filename = vim.list_contains(config.jump.show, "filename")
+			local show_space = vim.list_contains(config.jump.show, "space")
+			local show_label = vim.list_contains(config.jump.show, "label")
+			local show_stick = vim.list_contains(config.jump.show, "stick")
 
 			local col_offset = 0
 			-- Find where content starts (after right-alignment padding)
@@ -573,7 +573,7 @@ end
 
 ---Show the buffer sticks floating window
 ---Creates the window and renders the current buffer state
-local function show()
+function M.show()
 	create_or_update_floating_window()
 	render_buffers()
 	state.visible = true
@@ -581,7 +581,7 @@ end
 
 ---Hide the buffer sticks floating window
 ---Closes the window and updates the visibility state
-local function hide()
+function M.hide()
 	if vim.api.nvim_win_is_valid(state.win) then
 		vim.api.nvim_win_close(state.win, true)
 		state.win = -1
@@ -592,7 +592,7 @@ end
 ---Enter jump mode to navigate buffers by typing characters
 local function jump()
 	if not state.visible then
-		show()
+		M.show()
 	end
 
 	state.jump_mode = true
@@ -617,7 +617,7 @@ local function jump()
 		end
 
 		-- Handle backspace
-		if char == 8 or char == 127 then
+		if vim.list_contains({ 8, 127 }, char) then
 			if #state.jump_input > 0 then
 				state.jump_input = state.jump_input:sub(1, -2)
 				if #state.jump_input == 0 then
@@ -686,11 +686,11 @@ end
 
 ---Toggle the visibility of buffer sticks
 ---Shows if hidden, hides if visible
-local function toggle()
+function M.toggle()
 	if state.visible then
-		hide()
+		M.hide()
 	else
-		show()
+		M.show()
 	end
 end
 
@@ -756,9 +756,7 @@ function M.setup(opts)
 			state.cached_labels = {}
 
 			if state.visible then
-				vim.schedule(function()
-					show() -- Refresh the display
-				end)
+				vim.schedule(M.show) -- Refresh the display
 			end
 		end,
 	})
@@ -776,27 +774,19 @@ function M.setup(opts)
 		group = augroup,
 		callback = function()
 			if state.visible then
-				vim.schedule(function()
-					show() -- Refresh the display and position
-				end)
+				vim.schedule(M.show) -- Refresh the display and position
 			end
 		end,
 	})
 
 	-- Store globally for access
 	_G.BufferSticks = {
-		toggle = toggle,
-		show = show,
-		hide = hide,
+		toggle = M.toggle,
+		show = M.show,
+		hide = M.hide,
 		jump = jump,
 	}
 end
-
--- Expose functions for direct access
-M.toggle = toggle
-M.show = show
-M.hide = hide
-M.jump = jump
 
 return M
 -- vim:noet:ts=4:sts=4:sw=4:

@@ -668,13 +668,9 @@ local function jump()
 				return
 			end
 
-			-- Multiple matches, continue with timeout
+			-- Multiple matches, continue immediately
 			render_buffers()
-			vim.defer_fn(function()
-				if state.jump_mode then
-					handle_input()
-				end
-			end, vim.o.timeoutlen)
+			vim.schedule(handle_input)
 		else
 			-- Invalid character, exit jump mode
 			state.jump_mode = false

@@ -483,7 +483,13 @@ local function render_buffers()
 			if show_stick then
 				local stick_width = vim.fn.strwidth(buffer.is_current and config.active_char or config.inactive_char)
 				local hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
-				vim.hl.range(state.buf, ns_id, hl_group, { line_idx, col_offset }, {line_idx, col_offset + stick_width })
+				vim.hl.range(
+					state.buf,
+					ns_id,
+					hl_group,
+					{ line_idx, col_offset },
+					{ line_idx, col_offset + stick_width }
+				)
 				col_offset = col_offset + stick_width
 			end
 
@@ -519,7 +525,13 @@ local function render_buffers()
 				if label_start_pos then
 					local byte_start = col_offset + label_start_pos - 1 -- Convert to absolute byte position
 					local byte_end = byte_start + #buffer.label -- Byte length, not display width
-					vim.hl.range(state.buf, ns_id, "BufferSticksLabel", { line_idx, byte_start }, { line_idx, byte_end })
+					vim.hl.range(
+						state.buf,
+						ns_id,
+						"BufferSticksLabel",
+						{ line_idx, byte_start },
+						{ line_idx, byte_end }
+					)
 				end
 			end
 		else

@@ -80,6 +80,7 @@ require("buffer-sticks").setup({
   active_char = "──",           -- Character for active buffer
   inactive_char = " ─",         -- Character for inactive buffers
   transparent = true,           -- Remove background color (shows terminal/editor background)
+  auto_hide = true,                -- Auto-hide when cursor is over float (default: true)
   label = { show = "jump" },       -- Label display: "always", "jump", or "never"
   jump = { show = { "filename", "space", "label" } }, -- Jump mode display options
   -- winblend = 100,                    -- Window blend level (0-100, 0=opaque, 100=fully blended)

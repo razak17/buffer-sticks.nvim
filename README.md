@@ -60,7 +60,7 @@ return {
     })
   end,
   keys = {
-    { "<leader>j", function() require("buffer-sticks").jump() end, desc = "Buffer jump mode" },
+    { "<leader>j", function() BufferSticks.jump() end, desc = "Buffer jump mode" },
   },
 }
 ```
@@ -92,26 +92,23 @@ require("buffer-sticks").setup({
 
 ```lua
 -- Toggle visibility
-require("buffer-sticks").toggle()
+BufferSticks.toggle()
 
 -- Show
-require("buffer-sticks").show()
+BufferSticks.show()
 
 -- Hide
-require("buffer-sticks").hide()
+BufferSticks.hide()
 
 -- Enter jump mode to navigate by typing
-require("buffer-sticks").jump()
-
--- Or use the command
-:BufferSticks
+BufferSticks.jump()
 ```
 
 ## Jump Mode
 
 Jump mode allows you to quickly navigate to buffers by typing their first character(s):
 
-1. Call `require("buffer-sticks").jump()`
+1. Call `BufferSticks.jump()`
 2. Type the first character of the buffer you want to jump to
 3. If multiple buffers match, continue typing more characters
 4. Press `Esc` or `Ctrl-C` to cancel

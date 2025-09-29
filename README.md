@@ -1,8 +1,12 @@
 # buffer-sticks.nvim
 
-A minimal Neovim plugin that displays a vertical indicator showing open buffers.
+A neovim plugin that displays a vertical indicator showing open buffers.
 
 ![Demo](demo.png)
+
+Jump mode for quick buffer navigation:
+
+![Jump Demo](jump-demo.png)
 
 ## Features
 

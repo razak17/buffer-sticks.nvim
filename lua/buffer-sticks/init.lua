@@ -8,11 +8,11 @@
 local M = {}
 
 ---@class BufferSticksState
----@field win number Window handle for the floating window
----@field buf number Buffer handle for the display buffer
+---@field win integer Window handle for the floating window
+---@field buf integer Buffer handle for the display buffer
 ---@field visible boolean Whether the buffer sticks are currently visible
----@field cached_buffer_ids number[] Cached list of buffer IDs for label generation
----@field cached_labels table<number, string> Map of buffer ID to generated label
+---@field cached_buffer_ids integer[] Cached list of buffer IDs for label generation
+---@field cached_labels table<integer, string> Map of buffer ID to generated label
 local state = {
 	win = -1,
 	buf = -1,
@@ -23,16 +23,11 @@ local state = {
 	cached_labels = {},
 }
 
----@class BufferSticksHighlights
----@field fg? string Foreground color (hex color or highlight group name)
----@field bg? string Background color (hex color or highlight group name)
----@field bold? boolean Bold text
----@field italic? boolean Italic text
----@field link? string Link to existing highlight group (alternative to defining colors)
+---@alias BufferSticksHighlights vim.api.keyset.highlight
 
 ---@class BufferSticksOffset
----@field x number Horizontal offset from default position
----@field y number Vertical offset from default position
+---@field x integer Horizontal offset from default position
+---@field y integer Vertical offset from default position
 
 ---@class BufferSticksJump
 ---@field show string[] What to show in jump mode: "filename", "space", "label", "stick"
@@ -69,13 +64,13 @@ local config = {
 }
 
 ---@class BufferInfo
----@field id number Buffer ID
+---@field id integer Buffer ID
 ---@field name string Buffer name/path
 ---@field is_current boolean Whether this is the currently active buffer
 ---@field label string Generated unique label for this buffer
 
 ---Check if buffer list has changed compared to cached version
----@param current_buffer_ids number[] Current list of buffer IDs
+---@param current_buffer_ids integer[] Current list of buffer IDs
 ---@return boolean changed Whether the buffer list has changed
 local function has_buffer_list_changed(current_buffer_ids)
 	if #current_buffer_ids ~= #state.cached_buffer_ids then
@@ -95,8 +90,11 @@ end
 ---@param buffers BufferInfo[] List of buffers to generate labels for
 ---@return BufferInfo[] buffers List of buffers with unique labels assigned
 local function generate_unique_labels(buffers)
+	---@type table<integer, string>
 	local labels = {}
+	---@type table<string, boolean>
 	local used_labels = {}
+	---@type string[]
 	local filename_map = {}
 
 	-- Phase 1: Extract filenames and prepare data
@@ -153,7 +151,7 @@ local function generate_unique_labels(buffers)
 
 			-- Phase 4: Fallback to sequential letters
 			if not found_label then
-				local base_char = string.byte("a")
+				local base_char = ("a"):byte()
 				for i = 0, 25 do
 					local fallback_char = string.char(base_char + i)
 					if not used_labels[fallback_char] then
@@ -369,16 +367,19 @@ local function create_or_update_floating_window()
 		state.win = vim.api.nvim_open_win(state.buf, false, win_config)
 	end
 
+	---@type vim.api.keyset.option
+	local win_opts = { win = state.win }
+
 	-- Set winblend if specified
 	if config.winblend then
-		vim.api.nvim_win_set_option(state.win, "winblend", config.winblend)
+		vim.api.nvim_set_option_value("winblend", config.winblend, win_opts)
 	end
 
 	-- Set window background based on transparency
 	if not config.winblend and not config.transparent then
-		vim.api.nvim_win_set_option(state.win, "winhl", "Normal:BufferSticksBackground")
+		vim.api.nvim_set_option_value("winhl", "Normal:BufferSticksBackground", win_opts)
 	else
-		vim.api.nvim_win_set_option(state.win, "winhl", "Normal:NONE")
+		vim.api.nvim_set_option_value("winhl", "Normal:NONE", win_opts)
 	end
 
 	return { buf = state.buf, win = state.win }
@@ -456,6 +457,7 @@ local function render_buffers()
 
 	-- Right-align content within the window
 	local aligned_lines = right_align_lines(lines, window_width)
+	local ns_id = vim.api.nvim_create_namespace("BufferSticks")
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, aligned_lines)
 
 	-- Set highlights
@@ -481,7 +483,7 @@ local function render_buffers()
 			if show_stick then
 				local stick_width = vim.fn.strwidth(buffer.is_current and config.active_char or config.inactive_char)
 				local hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
-				vim.api.nvim_buf_add_highlight(state.buf, -1, hl_group, line_idx, col_offset, col_offset + stick_width)
+				vim.hl.range(state.buf, ns_id, hl_group, { line_idx, col_offset }, {line_idx, col_offset + stick_width })
 				col_offset = col_offset + stick_width
 			end
 
@@ -490,13 +492,12 @@ local function render_buffers()
 				local filename = vim.fn.fnamemodify(buffer.name, ":t")
 				local filename_width = vim.fn.strwidth(filename)
 				local hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
-				vim.api.nvim_buf_add_highlight(
+				vim.hl.range(
 					state.buf,
-					-1,
+					ns_id,
 					hl_group,
-					line_idx,
-					col_offset,
-					col_offset + filename_width
+					{ line_idx, col_offset },
+					{ line_idx, col_offset + filename_width }
 				)
 				col_offset = col_offset + filename_width
 
@@ -518,16 +519,18 @@ local function render_buffers()
 				if label_start_pos then
 					local byte_start = col_offset + label_start_pos - 1 -- Convert to absolute byte position
 					local byte_end = byte_start + #buffer.label -- Byte length, not display width
-					vim.api.nvim_buf_add_highlight(state.buf, -1, "BufferSticksLabel", line_idx, byte_start, byte_end)
+					vim.hl.range(state.buf, ns_id, "BufferSticksLabel", { line_idx, byte_start }, { line_idx, byte_end })
 				end
 			end
 		else
 			-- Normal mode: highlight entire line
-			if buffer.is_current then
-				vim.api.nvim_buf_add_highlight(state.buf, -1, "BufferSticksActive", line_idx, 0, -1)
-			else
-				vim.api.nvim_buf_add_highlight(state.buf, -1, "BufferSticksInactive", line_idx, 0, -1)
-			end
+			vim.hl.range(
+				state.buf,
+				ns_id,
+				buffer.is_current and "BufferSticksActive" or "BufferSticksInactive",
+				{ line_idx, 0 },
+				{ line_idx, -1 }
+			)
 		end
 	end
 end
@@ -764,3 +767,4 @@ M.hide = hide
 M.jump = jump
 
 return M
+-- vim:noet:ts=4:sts=4:sw=4:

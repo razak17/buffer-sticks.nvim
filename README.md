@@ -59,7 +59,7 @@ return {
 	config = function()
 		local stick = require("buffer-sticks")
 		stick.setup({
-			filter = { filetypes = { "terminal" } },
+			filter = { buftypes = { "terminal" } },
 			highlights = {
 				active = { link = "Statement" },
 				inactive = { link = "Whitespace" },
@@ -83,7 +83,8 @@ require("buffer-sticks").setup({
   jump = { show = { "filename", "space", "label" } }, -- Jump mode display options
   -- winblend = 100,                    -- Window blend level (0-100, 0=opaque, 100=fully blended)
   -- filter = {
-  --   filetypes = { "terminal" },    -- Exclude terminal buffers (also: "NvimTree", "help", "qf", "neo-tree", "Trouble")
+  --   filetypes = { "help", "qf" },    -- Exclude by filetype (also: "NvimTree", "neo-tree", "Trouble")
+  --   buftypes = { "terminal" },       -- Exclude by buftype (also: "help", "quickfix", "nofile")
   --   names = { ".*%.git/.*", "^/tmp/.*" },  -- Exclude buffers matching lua patterns
   -- },
   highlights = {

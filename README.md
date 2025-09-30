@@ -57,8 +57,8 @@ return {
 		},
 	},
 	config = function()
-		local stick = require("buffer-sticks")
-		stick.setup({
+		local sticks = require("buffer-sticks")
+		sticks.setup({
 			filter = { buftypes = { "terminal" } },
 			highlights = {
 				active = { link = "Statement" },
@@ -66,7 +66,7 @@ return {
 				label = { link = "Comment" },
 			},
 		})
-		stick.show()
+		sticks.show()
 	end,
 }
 ```

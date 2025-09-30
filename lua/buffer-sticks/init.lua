@@ -712,7 +712,7 @@ function M.hide()
 end
 
 ---Enter jump mode to navigate buffers by typing characters
-local function jump()
+function M.jump()
 	if not state.visible then
 		M.show()
 	end
@@ -899,7 +899,7 @@ function M.setup(opts)
 		toggle = M.toggle,
 		show = M.show,
 		hide = M.hide,
-		jump = jump,
+		jump = M.jump,
 	}
 end
 

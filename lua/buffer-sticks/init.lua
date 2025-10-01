@@ -53,6 +53,8 @@ local state = {
 ---@field padding BufferSticksPadding Padding inside the window
 ---@field active_char string Character to display for the active buffer
 ---@field inactive_char string Character to display for inactive buffers
+---@field active_modified_char string Character to display for the active modified buffer
+---@field inactive_modified_char string Character to display for inactive modified buffers
 ---@field transparent boolean Whether the background should be transparent
 ---@field winblend? number Window blend level (0-100)
 ---@field auto_hide boolean Auto-hide when cursor is over float
@@ -65,14 +67,18 @@ local config = {
 	padding = { top = 0, right = 1, bottom = 0, left = 1 },
 	active_char = "──",
 	inactive_char = " ─",
+	active_modified_char = "──",
+	inactive_modified_char = " ─",
 	transparent = true,
 	auto_hide = true,
 	label = { show = "jump" },
 	jump = { show = { "filename", "space", "label" } },
 	highlights = {
-		active = { fg = "#ffffff", bold = true },
-		inactive = { fg = "#666666" },
-		label = { fg = "#ffff00" }, -- Highlight for buffer labels
+		active = { fg = "#bbbbbb" },
+		inactive = { fg = "#333333" },
+		active_modified = { fg = "#ffffff" },
+		inactive_modified = { fg = "#999999" },
+		label = { fg = "#aaaaaa", italic = true },
 	},
 }
 
@@ -80,6 +86,7 @@ local config = {
 ---@field id integer Buffer ID
 ---@field name string Buffer name/path
 ---@field is_current boolean Whether this is the currently active buffer
+---@field is_modified boolean Whether this buffer has unsaved changes
 ---@field label string Generated unique label for this buffer
 
 ---Check if buffer list has changed compared to cached version
@@ -254,6 +261,7 @@ local function get_buffer_list()
 					id = buf,
 					name = buf_name,
 					is_current = buf == current_buf,
+					is_modified = vim.bo[buf].modified,
 				})
 				table.insert(buffer_ids, buf)
 			end
@@ -334,7 +342,12 @@ local function calculate_required_width()
 
 		if show_stick then
 			total_width = total_width
-				+ math.max(vim.fn.strwidth(config.active_char), vim.fn.strwidth(config.inactive_char))
+				+ math.max(
+					vim.fn.strwidth(config.active_char),
+					vim.fn.strwidth(config.inactive_char),
+					vim.fn.strwidth(config.active_modified_char),
+					vim.fn.strwidth(config.inactive_modified_char)
+				)
 		end
 
 		if show_filename then
@@ -378,8 +391,13 @@ local function calculate_required_width()
 		-- Normal mode: check if labels should be shown
 		local should_show_labels = (config.label and config.label.show == "always")
 
-		-- Use the longer of active_char or inactive_char (display width)
-		max_width = math.max(vim.fn.strwidth(config.active_char), vim.fn.strwidth(config.inactive_char))
+		-- Use the longest of all character options (display width)
+		max_width = math.max(
+			vim.fn.strwidth(config.active_char),
+			vim.fn.strwidth(config.inactive_char),
+			vim.fn.strwidth(config.active_modified_char),
+			vim.fn.strwidth(config.inactive_modified_char)
+		)
 
 		if should_show_labels then
 			-- Find the longest label among all buffers
@@ -555,10 +573,18 @@ local function render_buffers()
 			local parts = {}
 
 			if show_stick then
-				if buffer.is_current then
-					table.insert(parts, config.active_char)
+				if buffer.is_modified then
+					if buffer.is_current then
+						table.insert(parts, config.active_modified_char)
+					else
+						table.insert(parts, config.inactive_modified_char)
+					end
 				else
-					table.insert(parts, config.inactive_char)
+					if buffer.is_current then
+						table.insert(parts, config.active_char)
+					else
+						table.insert(parts, config.inactive_char)
+					end
 				end
 			end
 
@@ -578,16 +604,32 @@ local function render_buffers()
 			end
 		elseif should_show_char then
 			-- Use generated unique label
-			if buffer.is_current then
-				line_content = config.active_char .. " " .. buffer.label
+			if buffer.is_modified then
+				if buffer.is_current then
+					line_content = config.active_modified_char .. " " .. buffer.label
+				else
+					line_content = config.inactive_modified_char .. " " .. buffer.label
+				end
 			else
-				line_content = config.inactive_char .. " " .. buffer.label
+				if buffer.is_current then
+					line_content = config.active_char .. " " .. buffer.label
+				else
+					line_content = config.inactive_char .. " " .. buffer.label
+				end
 			end
 		else
-			if buffer.is_current then
-				line_content = config.active_char
+			if buffer.is_modified then
+				if buffer.is_current then
+					line_content = config.active_modified_char
+				else
+					line_content = config.inactive_modified_char
+				end
 			else
-				line_content = config.inactive_char
+				if buffer.is_current then
+					line_content = config.active_char
+				else
+					line_content = config.inactive_char
+				end
 			end
 		end
 		table.insert(lines, line_content)
@@ -624,8 +666,16 @@ local function render_buffers()
 
 			-- Highlight stick part
 			if show_stick then
-				local stick_width = vim.fn.strwidth(buffer.is_current and config.active_char or config.inactive_char)
-				local hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+				local stick_char
+				local hl_group
+				if buffer.is_modified then
+					stick_char = buffer.is_current and config.active_modified_char or config.inactive_modified_char
+					hl_group = buffer.is_current and "BufferSticksActiveModified" or "BufferSticksInactiveModified"
+				else
+					stick_char = buffer.is_current and config.active_char or config.inactive_char
+					hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+				end
+				local stick_width = vim.fn.strwidth(stick_char)
 				vim.hl.range(
 					state.buf,
 					ns_id,
@@ -640,7 +690,12 @@ local function render_buffers()
 			if show_filename then
 				local filename = vim.fn.fnamemodify(buffer.name, ":t")
 				local filename_width = vim.fn.strwidth(filename)
-				local hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+				local hl_group
+				if buffer.is_modified then
+					hl_group = buffer.is_current and "BufferSticksActiveModified" or "BufferSticksInactiveModified"
+				else
+					hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+				end
 				vim.hl.range(
 					state.buf,
 					ns_id,
@@ -679,13 +734,13 @@ local function render_buffers()
 			end
 		else
 			-- Normal mode: highlight entire line
-			vim.hl.range(
-				state.buf,
-				ns_id,
-				buffer.is_current and "BufferSticksActive" or "BufferSticksInactive",
-				{ line_idx, 0 },
-				{ line_idx, -1 }
-			)
+			local hl_group
+			if buffer.is_modified then
+				hl_group = buffer.is_current and "BufferSticksActiveModified" or "BufferSticksInactiveModified"
+			else
+				hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+			end
+			vim.hl.range(state.buf, ns_id, hl_group, { line_idx, 0 }, { line_idx, -1 })
 		end
 	end
 end
@@ -697,7 +752,6 @@ function M.show()
 	render_buffers()
 	state.visible = true
 	state.auto_hidden = false -- Reset auto-hide state when manually shown
-
 end
 
 ---Hide the buffer sticks floating window
@@ -827,6 +881,34 @@ function M.setup(opts)
 			vim.api.nvim_set_hl(0, "BufferSticksInactive", inactive_hl)
 		end
 
+		if config.highlights.active_modified then
+			if config.highlights.active_modified.link then
+				vim.api.nvim_set_hl(0, "BufferSticksActiveModified", { link = config.highlights.active_modified.link })
+			else
+				local active_modified_hl = vim.deepcopy(config.highlights.active_modified)
+				if is_transparent then
+					active_modified_hl.bg = nil -- Remove background for transparency
+				end
+				vim.api.nvim_set_hl(0, "BufferSticksActiveModified", active_modified_hl)
+			end
+		end
+
+		if config.highlights.inactive_modified then
+			if config.highlights.inactive_modified.link then
+				vim.api.nvim_set_hl(
+					0,
+					"BufferSticksInactiveModified",
+					{ link = config.highlights.inactive_modified.link }
+				)
+			else
+				local inactive_modified_hl = vim.deepcopy(config.highlights.inactive_modified)
+				if is_transparent then
+					inactive_modified_hl.bg = nil -- Remove background for transparency
+				end
+				vim.api.nvim_set_hl(0, "BufferSticksInactiveModified", inactive_modified_hl)
+			end
+		end
+
 		if config.highlights.label then
 			if config.highlights.label.link then
 				vim.api.nvim_set_hl(0, "BufferSticksLabel", { link = config.highlights.label.link })
@@ -863,6 +945,17 @@ function M.setup(opts)
 		end,
 	})
 
+	-- Update display when buffer modified status changes
+	vim.api.nvim_create_autocmd({ "BufModifiedSet", "TextChanged", "TextChangedI", "BufWritePost" }, {
+		group = augroup,
+		callback = function()
+			if state.visible then
+				-- Just re-render, don't need to recreate window
+				vim.schedule(render_buffers)
+			end
+		end,
+	})
+
 	-- Reapply highlights when colorscheme changes
 	vim.api.nvim_create_autocmd("ColorScheme", {
 		group = augroup,
@@ -883,8 +976,13 @@ function M.setup(opts)
 
 	-- Handle cursor movement for auto-hide behavior
 	vim.api.nvim_create_autocmd({
-		"CursorMoved", "CursorMovedI", "CursorHold", "CursorHoldI",
-		"WinScrolled", "ModeChanged", "SafeState"
+		"CursorMoved",
+		"CursorMovedI",
+		"CursorHold",
+		"CursorHoldI",
+		"WinScrolled",
+		"ModeChanged",
+		"SafeState",
 	}, {
 		group = augroup,
 		callback = function()

@@ -79,6 +79,8 @@ require("buffer-sticks").setup({
   padding = { top = 0, right = 1, bottom = 0, left = 1 }, -- Padding inside the float
   active_char = "──",           -- Character for active buffer
   inactive_char = " ─",         -- Character for inactive buffers
+  active_modified_char = "──",  -- Character for active modified buffer (unsaved changes)
+  inactive_modified_char = " ─", -- Character for inactive modified buffers (unsaved changes)
   transparent = true,           -- Remove background color (shows terminal/editor background)
   auto_hide = true,                -- Auto-hide when cursor is over float (default: true)
   label = { show = "jump" },       -- Label display: "always", "jump", or "never"
@@ -90,9 +92,11 @@ require("buffer-sticks").setup({
   --   names = { ".*%.git/.*", "^/tmp/.*" },  -- Exclude buffers matching lua patterns
   -- },
   highlights = {
-    active = { fg = "#ffffff" },
-    inactive = { fg = "#666666" },
-    label = { fg = "#ffff00" }
+    active = { fg = "#bbbbbb" },
+    inactive = { fg = "#333333" },
+    active_modified = { fg = "#ffffff" }, 
+    inactive_modified = { fg = "#999999" },
+    label = { fg = "#aaaaaa", italic = true }
   }
 })
 ```

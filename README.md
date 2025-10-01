@@ -61,9 +61,11 @@ return {
 		sticks.setup({
 			filter = { buftypes = { "terminal" } },
 			highlights = {
-				active = { link = "Statement" },
-				inactive = { link = "Whitespace" },
-				label = { link = "Comment" },
+                active = { link = "Statement" },
+                inactive = { link = "Whitespace" },
+                active_modified = { link = "Constant" },
+                inactive_modified = { link = "Constant" },
+                label = { link = "Comment" },
 			},
 		})
 		sticks.show()
@@ -146,9 +148,11 @@ You can use hex colors:
 
 ```lua
 highlights = {
-  active = { fg = "#ffffff" },
-  inactive = { fg = "#666666" },
-  label = { fg = "#ffff00" }
+  active = { fg = "#bbbbbb" },
+  inactive = { fg = "#333333" },
+  active_modified = { fg = "#ffffff" }, 
+  inactive_modified = { fg = "#999999" },
+  label = { fg = "#aaaaaa", italic = true }
 }
 ```
 
@@ -158,7 +162,9 @@ Or link to existing highlight groups:
 highlights = {
   active = { link = "Statement" },
   inactive = { link = "Whitespace" },
-  label = { link = "Comment" }
+  active_modified = { link = "Constant" },
+  inactive_modified = { link = "Constant" },
+  label = { link = "Comment" },
 }
 ```
 

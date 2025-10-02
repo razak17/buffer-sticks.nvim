@@ -80,7 +80,7 @@ local config = {
 	alternate_char = " ─",
 	active_modified_char = "──",
 	inactive_modified_char = " ─",
-	alternate_modified_char = "*─",
+	alternate_modified_char = " ─",
 	transparent = true,
 	auto_hide = true,
 	label = { show = "list" },

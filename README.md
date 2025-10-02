@@ -11,7 +11,7 @@ Jump mode for quick buffer navigation:
 ## Features
 
 - Visual representation of open buffers
-- Highlights the currently active buffer
+- Highlights for active, alternate, inactive, and modified buffers
 - List mode for quick buffer navigation or closing by typing characters
 - Custom action functions for building buffer pickers
 - Configurable positioning and appearance

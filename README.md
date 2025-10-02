@@ -83,8 +83,10 @@ require("buffer-sticks").setup({
   padding = { top = 0, right = 1, bottom = 0, left = 1 }, -- Padding inside the float
   active_char = "──",           -- Character for active buffer
   inactive_char = " ─",         -- Character for inactive buffers
+  alternate_char = " ─",        -- Character for alternate buffer
   active_modified_char = "──",  -- Character for active modified buffer (unsaved changes)
   inactive_modified_char = " ─", -- Character for inactive modified buffers (unsaved changes)
+  alternate_modified_char = " ─", -- Character for alternate modified buffer (unsaved changes)
   transparent = true,           -- Remove background color (shows terminal/editor background)
   auto_hide = true,                -- Auto-hide when cursor is over float (default: true)
   label = { show = "jump" },       -- Label display: "always", "jump", or "never"

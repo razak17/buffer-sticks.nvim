@@ -54,7 +54,26 @@ return {
 			function()
 				BufferSticks.jump()
 			end,
-			desc = "Buffer jump mode",
+			desc = "Jump to buffer",
+		},
+		{
+			"<leader>q",
+			function()
+				BufferSticks.close()
+			end,
+			desc = "Close buffer",
+		},
+		{
+			"<leader>p",
+			function()
+				BufferSticks.list({
+					action = function(buffer, leave)
+						print("Selected: " .. buffer.name)
+						leave()
+					end
+				})
+			end,
+			desc = "Buffer picker",
 		},
 	},
 	config = function()

@@ -115,7 +115,7 @@ local function generate_unique_labels(buffers)
 	local filename_map = {}
 	local collision_groups = {}
 
-	-- Phase 1: Extract filenames and group by first character
+	-- Phase 1: Extract filenames and group by first word character (skip leading symbols)
 	for _, buffer in ipairs(buffers) do
 		local filename = vim.fn.fnamemodify(buffer.name, ":t")
 		if filename == "" then
@@ -123,13 +123,16 @@ local function generate_unique_labels(buffers)
 		end
 		filename_map[buffer.id] = filename:lower()
 
-		local first_char = filename:sub(1, 1):lower()
-		if first_char:match("%w") then
-			if not collision_groups[first_char] then
-				collision_groups[first_char] = {}
+		-- Find first word character (skip leading symbols like . _ -)
+		local first_word_char = filename:match("%w")
+		if first_word_char then
+			first_word_char = first_word_char:lower()
+			if not collision_groups[first_word_char] then
+				collision_groups[first_word_char] = {}
 			end
-			table.insert(collision_groups[first_char], buffer)
+			table.insert(collision_groups[first_word_char], buffer)
 		end
+		-- Buffers with no word characters will be handled in Phase 3
 	end
 
 	-- Phase 2: Assign labels based on collision detection
@@ -193,15 +196,16 @@ local function generate_unique_labels(buffers)
 		end
 	end
 
-	-- Phase 3: Handle buffers that don't start with word characters
+	-- Phase 3: Handle buffers with no word characters (use numeric labels)
 	for _, buffer in ipairs(buffers) do
 		if not labels[buffer.id] then
-			local base_char = string.byte("a")
-			for i = 0, 25 do
-				local fallback_char = string.char(base_char + i)
-				if not used_labels[fallback_char] then
-					labels[buffer.id] = fallback_char
-					used_labels[fallback_char] = true
+			-- Use numeric labels for files with no word characters
+			-- This prevents collision with letter-based labels
+			for i = 0, 9 do
+				local numeric_label = tostring(i)
+				if not used_labels[numeric_label] then
+					labels[buffer.id] = numeric_label
+					used_labels[numeric_label] = true
 					break
 				end
 			end

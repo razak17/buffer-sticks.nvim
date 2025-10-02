@@ -637,7 +637,20 @@ local function create_or_update_floating_window()
 		-- Add a background highlight group if not transparent
 	end
 
+	-- Check if window is valid AND in current tabpage
+	local win_is_valid_in_current_tab = false
 	if vim.api.nvim_win_is_valid(state.win) then
+		-- Check if window exists in current tabpage
+		local current_tab_wins = vim.api.nvim_tabpage_list_wins(0)
+		for _, win in ipairs(current_tab_wins) do
+			if win == state.win then
+				win_is_valid_in_current_tab = true
+				break
+			end
+		end
+	end
+
+	if win_is_valid_in_current_tab then
 		vim.api.nvim_win_set_config(state.win, win_config)
 	else
 		state.win = vim.api.nvim_open_win(state.buf, false, win_config)
@@ -1205,6 +1218,16 @@ function M.setup(opts)
 		callback = function()
 			if state.visible then
 				vim.schedule(M.show) -- Refresh the display and position
+			end
+		end,
+	})
+
+	-- Show in new tab when entering it
+	vim.api.nvim_create_autocmd("TabEnter", {
+		group = augroup,
+		callback = function()
+			if state.visible then
+				vim.schedule(M.show) -- Recreate window in new tab
 			end
 		end,
 	})

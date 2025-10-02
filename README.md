@@ -168,7 +168,7 @@ BufferSticks.list({
 })
 ```
 
-## List Mode
+## List mode
 
 List mode allows you to quickly navigate to or close buffers by typing their first character(s):
 
@@ -189,10 +189,11 @@ List mode allows you to quickly navigate to or close buffers by typing their fir
 **Custom action function (buffer picker):**
 1. Call `BufferSticks.list({ action = function(buffer, leave) ... end })`
 2. Type the first character to select a buffer
-3. When a match is found, your function is called with:
+3. If multiple buffers match, continue typing more characters
+4. When a match is found, your function is called with:
    - `buffer`: The selected buffer info (with `id`, `name`, `label`, etc.)
    - `leave`: Function to call when you're done to exit list mode
-4. You control when to exit by calling `leave()`
+5. You control when to exit by calling `leave()`
 
 **Label Display Options:**
 - `label = { show = "always" }` - Always show buffer name labels

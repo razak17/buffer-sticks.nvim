@@ -13,12 +13,16 @@ local M = {}
 ---@field visible boolean Whether the buffer sticks are currently visible
 ---@field cached_buffer_ids integer[] Cached list of buffer IDs for label generation
 ---@field cached_labels table<integer, string> Map of buffer ID to generated label
+---@field list_mode boolean Whether list mode is active
+---@field list_input string Current input in list mode
+---@field list_action string Current action in list mode ("open" or "close")
 local state = {
 	win = -1,
 	buf = -1,
 	visible = false,
-	jump_mode = false,
-	jump_input = "",
+	list_mode = false,
+	list_input = "",
+	list_action = "open",
 	cached_buffer_ids = {},
 	cached_labels = {},
 	auto_hidden = false,
@@ -37,11 +41,15 @@ local state = {
 ---@field bottom integer Bottom padding inside the window
 ---@field left integer Left padding inside the window
 
----@class BufferSticksJump
----@field show string[] What to show in jump mode: "filename", "space", "label", "stick"
+---@class BufferSticksListKeys
+---@field close_buffer string Key combination to close buffer in list mode
+
+---@class BufferSticksList
+---@field show string[] What to show in list mode: "filename", "space", "label", "stick"
+---@field keys BufferSticksListKeys Key mappings for list mode
 
 ---@class BufferSticksLabel
----@field show "always"|"jump"|"never" When to show buffer name characters
+---@field show "always"|"list"|"never" When to show buffer name characters
 
 ---@class BufferSticksFilter
 ---@field filetypes? string[] List of filetypes to exclude from buffer sticks
@@ -61,7 +69,7 @@ local state = {
 ---@field winblend? number Window blend level (0-100)
 ---@field auto_hide boolean Auto-hide when cursor is over float
 ---@field label? BufferSticksLabel Label display configuration
----@field jump? BufferSticksJump Jump mode configuration
+---@field list? BufferSticksList List mode configuration
 ---@field filter? BufferSticksFilter Filter configuration for excluding buffers
 ---@field highlights table<string, BufferSticksHighlights> Highlight groups for active/inactive/label states
 local config = {
@@ -75,8 +83,13 @@ local config = {
 	alternate_modified_char = "*─",
 	transparent = true,
 	auto_hide = true,
-	label = { show = "jump" },
-	jump = { show = { "filename", "space", "label" } },
+	label = { show = "list" },
+	list = {
+		show = { "filename", "space", "label" },
+		keys = {
+			close_buffer = "<C-q>",
+		},
+	},
 	highlights = {
 		active = { fg = "#bbbbbb" },
 		alternate = { fg = "#888888" },
@@ -434,12 +447,12 @@ local function calculate_required_width()
 	local max_width = 1
 
 	-- Calculate based on current display mode
-	if state.jump_mode and config.jump and config.jump.show then
-		-- Jump mode: calculate based on jump.show config
-		local show_filename = vim.list_contains(config.jump.show, "filename")
-		local show_space = vim.list_contains(config.jump.show, "space")
-		local show_label = vim.list_contains(config.jump.show, "label")
-		local show_stick = vim.list_contains(config.jump.show, "stick")
+	if state.list_mode and config.list and config.list.show then
+		-- List mode: calculate based on list.show config
+		local show_filename = vim.list_contains(config.list.show, "filename")
+		local show_space = vim.list_contains(config.list.show, "space")
+		local show_label = vim.list_contains(config.list.show, "label")
+		local show_stick = vim.list_contains(config.list.show, "stick")
 
 		local total_width = 0
 
@@ -557,7 +570,7 @@ end
 ---Handle cursor movement for auto-hide behavior
 local function handle_cursor_move()
 	-- Only handle auto-hide if auto_hide is enabled and we're visible (or auto-hidden)
-	if not config.auto_hide or state.jump_mode then
+	if not config.auto_hide or state.list_mode then
 		return
 	end
 
@@ -672,16 +685,16 @@ local function render_buffers()
 		-- Determine if we should show characters based on config and state
 		if config.label and config.label.show == "always" then
 			should_show_char = true
-		elseif config.label and config.label.show == "jump" and state.jump_mode then
+		elseif config.label and config.label.show == "list" and state.list_mode then
 			should_show_char = true
 		end
 
-		-- In jump mode, use jump.show configuration
-		if state.jump_mode and config.jump and config.jump.show then
-			local show_filename = vim.list_contains(config.jump.show, "filename")
-			local show_space = vim.list_contains(config.jump.show, "space")
-			local show_label = vim.list_contains(config.jump.show, "label")
-			local show_stick = vim.list_contains(config.jump.show, "stick")
+		-- In list mode, use list.show configuration
+		if state.list_mode and config.list and config.list.show then
+			local show_filename = vim.list_contains(config.list.show, "filename")
+			local show_space = vim.list_contains(config.list.show, "space")
+			local show_label = vim.list_contains(config.list.show, "label")
+			local show_stick = vim.list_contains(config.list.show, "stick")
 
 			local parts = {}
 
@@ -776,12 +789,12 @@ local function render_buffers()
 		local line_idx = i - 1 + config.padding.top -- Account for top padding
 		local line_content = final_lines[i + config.padding.top] -- Access content from final padded lines
 
-		-- In jump mode, apply specific highlighting for different parts
-		if state.jump_mode and config.jump and config.jump.show then
-			local show_filename = vim.list_contains(config.jump.show, "filename")
-			local show_space = vim.list_contains(config.jump.show, "space")
-			local show_label = vim.list_contains(config.jump.show, "label")
-			local show_stick = vim.list_contains(config.jump.show, "stick")
+		-- In list mode, apply specific highlighting for different parts
+		if state.list_mode and config.list and config.list.show then
+			local show_filename = vim.list_contains(config.list.show, "filename")
+			local show_space = vim.list_contains(config.list.show, "space")
+			local show_label = vim.list_contains(config.list.show, "label")
+			local show_stick = vim.list_contains(config.list.show, "stick")
 
 			local col_offset = 0
 			-- Find where content starts (after right-alignment padding)
@@ -932,62 +945,84 @@ function M.hide()
 	state.auto_hidden = false -- Reset auto-hide state when manually hidden
 end
 
----Enter jump mode to navigate buffers by typing characters
-function M.jump()
+---Enter list mode to navigate or close buffers by typing characters
+---@param opts? {action?: "open"|"close"|fun(buffer: BufferInfo, leave: function)} Options for list mode
+function M.list(opts)
+	opts = opts or {}
+	local action = opts.action or "open"
+
 	if not state.visible then
 		M.show()
 	end
 
-	state.jump_mode = true
-	state.jump_input = ""
+	state.list_mode = true
+	state.list_input = ""
+	state.list_action = action
 
-	-- Refresh display to show characters (resize window for jump mode content)
+	-- Refresh display to show characters (resize window for list mode content)
 	create_or_update_floating_window()
 	render_buffers()
+
+	-- Helper to exit list mode
+	local function leave()
+		state.list_mode = false
+		state.list_input = ""
+		create_or_update_floating_window() -- Resize back to normal mode
+		render_buffers()
+	end
 
 	-- Start input loop
 	local function handle_input()
 		local char = vim.fn.getchar()
 		local char_str = type(char) == "number" and vim.fn.nr2char(char) or char
 
-		-- Handle escape or ctrl-c to exit jump mode
+		-- Handle escape or ctrl-c to exit list mode
 		if char == 27 or char_str == "\x03" or char_str == "\27" then
-			state.jump_mode = false
-			state.jump_input = ""
-			create_or_update_floating_window() -- Resize back to normal mode
-			render_buffers()
+			leave()
+			return
+		end
+
+		-- Handle configured close buffer key (default ctrl-q)
+		local close_key = config.list and config.list.keys and config.list.keys.close_buffer or "<C-q>"
+		if close_key == "<C-q>" and char == 17 then -- ctrl-q
+			-- Always close the current active buffer
+			local current_buf = vim.api.nvim_get_current_buf()
+			vim.api.nvim_buf_delete(current_buf, { force = false })
+			leave()
 			return
 		end
 
 		-- Handle regular character input
 		if char_str:match("%w") then
-			state.jump_input = state.jump_input .. char_str:lower()
+			state.list_input = state.list_input .. char_str:lower()
 
 			-- Find matching buffers
 			local buffers = get_buffer_list()
 			local matches = {}
 			for _, buffer in ipairs(buffers) do
 				-- Match against the beginning of the generated label
-				local label_prefix = buffer.label:sub(1, #state.jump_input)
-				if label_prefix == state.jump_input then
+				local label_prefix = buffer.label:sub(1, #state.list_input)
+				if label_prefix == state.list_input then
 					table.insert(matches, buffer)
 				end
 			end
 
-			-- If exactly one match, jump to it
+			-- If exactly one match, perform the action
 			if #matches == 1 then
-				vim.api.nvim_set_current_buf(matches[1].id)
-				state.jump_mode = false
-				state.jump_input = ""
-				create_or_update_floating_window() -- Resize back to normal mode
-				render_buffers()
+				if type(state.list_action) == "function" then
+					-- Custom function action
+					state.list_action(matches[1], leave)
+				elseif state.list_action == "open" then
+					vim.api.nvim_set_current_buf(matches[1].id)
+					leave()
+				elseif state.list_action == "close" then
+					vim.api.nvim_buf_delete(matches[1].id, { force = false })
+					leave()
+				end
 				return
 			elseif #matches == 0 then
-				-- No matches, exit jump mode
-				state.jump_mode = false
-				state.jump_input = ""
-				create_or_update_floating_window() -- Resize back to normal mode
-				render_buffers()
+				-- No matches, exit list mode
+				leave()
 				return
 			end
 
@@ -995,16 +1030,23 @@ function M.jump()
 			render_buffers()
 			vim.schedule(handle_input)
 		else
-			-- Invalid character, exit jump mode
-			state.jump_mode = false
-			state.jump_input = ""
-			create_or_update_floating_window() -- Resize back to normal mode
-			render_buffers()
+			-- Invalid character, exit list mode
+			leave()
 		end
 	end
 
 	-- Start input handling with a small delay
 	vim.defer_fn(handle_input, 10)
+end
+
+---Alias for list mode with "open" action
+function M.jump()
+	M.list({ action = "open" })
+end
+
+---Alias for list mode with "close" action
+function M.close()
+	M.list({ action = "close" })
 end
 
 ---Toggle the visibility of buffer sticks
@@ -1190,7 +1232,9 @@ function M.setup(opts)
 		toggle = M.toggle,
 		show = M.show,
 		hide = M.hide,
+		list = M.list,
 		jump = M.jump,
+		close = M.close,
 	}
 end
 

@@ -118,7 +118,7 @@ local function generate_unique_labels(buffers)
 	local filename_map = {}
 	local collision_groups = {}
 
-	-- Phase 1: Extract filenames and group by first character
+	-- Phase 1: Extract filenames and group by first word character (skip leading symbols)
 	for _, buffer in ipairs(buffers) do
 		local filename = vim.fn.fnamemodify(buffer.name, ":t")
 		if filename == "" then
@@ -126,13 +126,16 @@ local function generate_unique_labels(buffers)
 		end
 		filename_map[buffer.id] = filename:lower()
 
-		local first_char = filename:sub(1, 1):lower()
-		if first_char:match("%w") then
-			if not collision_groups[first_char] then
-				collision_groups[first_char] = {}
+		-- Find first word character (skip leading symbols like . _ -)
+		local first_word_char = filename:match("%w")
+		if first_word_char then
+			first_word_char = first_word_char:lower()
+			if not collision_groups[first_word_char] then
+				collision_groups[first_word_char] = {}
 			end
-			table.insert(collision_groups[first_char], buffer)
+			table.insert(collision_groups[first_word_char], buffer)
 		end
+		-- Buffers with no word characters will be handled in Phase 3
 	end
 
 	-- Phase 2: Assign labels based on collision detection
@@ -196,15 +199,16 @@ local function generate_unique_labels(buffers)
 		end
 	end
 
-	-- Phase 3: Handle buffers that don't start with word characters
+	-- Phase 3: Handle buffers with no word characters (use numeric labels)
 	for _, buffer in ipairs(buffers) do
 		if not labels[buffer.id] then
-			local base_char = string.byte("a")
-			for i = 0, 25 do
-				local fallback_char = string.char(base_char + i)
-				if not used_labels[fallback_char] then
-					labels[buffer.id] = fallback_char
-					used_labels[fallback_char] = true
+			-- Use numeric labels for files with no word characters
+			-- This prevents collision with letter-based labels
+			for i = 0, 9 do
+				local numeric_label = tostring(i)
+				if not used_labels[numeric_label] then
+					labels[buffer.id] = numeric_label
+					used_labels[numeric_label] = true
 					break
 				end
 			end
@@ -329,6 +333,96 @@ local function vertical_align_lines(lines)
 	return padded_lines
 end
 
+---Get display paths for buffers with recursive expansion for duplicates
+---@param buffers BufferInfo[] List of buffers
+---@return table<integer, string> Map of buffer.id to display path
+local function get_display_paths(buffers)
+	local display_paths = {}
+	local path_components = {}
+
+	-- Initialize with full paths split into components
+	for _, buffer in ipairs(buffers) do
+		local full_path = buffer.name
+		local components = {}
+
+		-- Split path into components (reverse order, filename first)
+		local filename = vim.fn.fnamemodify(full_path, ":t")
+		if filename ~= "" then
+			table.insert(components, filename)
+
+			-- Get parent directories
+			local parent = vim.fn.fnamemodify(full_path, ":h")
+			while parent ~= "" and parent ~= "." and parent ~= "/" do
+				local dir = vim.fn.fnamemodify(parent, ":t")
+				if dir ~= "" then
+					table.insert(components, dir)
+				end
+				parent = vim.fn.fnamemodify(parent, ":h")
+			end
+		end
+
+		path_components[buffer.id] = components
+		-- Start with just the filename
+		display_paths[buffer.id] = components[1] or "?"
+	end
+
+	-- Recursively expand duplicates
+	local max_iterations = 10 -- Safety limit
+	for _ = 1, max_iterations do
+		-- Group by current display path
+		local path_groups = {}
+		for buffer_id, display_path in pairs(display_paths) do
+			if not path_groups[display_path] then
+				path_groups[display_path] = {}
+			end
+			table.insert(path_groups[display_path], buffer_id)
+		end
+
+		-- Check if we still have duplicates
+		local has_duplicates = false
+		for _, group in pairs(path_groups) do
+			if #group > 1 then
+				has_duplicates = true
+				break
+			end
+		end
+
+		if not has_duplicates then
+			break
+		end
+
+		-- Expand duplicates by one level
+		for display_path, buffer_ids in pairs(path_groups) do
+			if #buffer_ids > 1 then
+				-- This path is duplicated, expand all buffers in this group
+				for _, buffer_id in ipairs(buffer_ids) do
+					local components = path_components[buffer_id]
+					local current_depth = 0
+
+					-- Count current depth
+					for i = 1, #components do
+						if display_paths[buffer_id]:find(components[i], 1, true) then
+							current_depth = math.max(current_depth, i)
+						end
+					end
+
+					-- Add one more parent level if available
+					if current_depth < #components then
+						local new_depth = current_depth + 1
+						local path_parts = {}
+						for i = new_depth, 1, -1 do
+							table.insert(path_parts, components[i])
+						end
+						display_paths[buffer_id] = table.concat(path_parts, "/")
+					end
+				end
+			end
+		end
+	end
+
+	return display_paths
+end
+
 ---Calculate the required width based on current display mode and content
 ---@return number width The calculated width needed for the floating window
 local function calculate_required_width()
@@ -356,11 +450,14 @@ local function calculate_required_width()
 		end
 
 		if show_filename then
-			-- Find the longest filename among all buffers
+			-- Get recursively-expanded display paths
+			local display_paths = get_display_paths(buffers)
+
+			-- Find the longest display path among all buffers
 			local max_filename_width = 0
 			for _, buffer in ipairs(buffers) do
-				local filename = vim.fn.fnamemodify(buffer.name, ":t")
-				max_filename_width = math.max(max_filename_width, vim.fn.strwidth(filename))
+				local display_path = display_paths[buffer.id] or vim.fn.fnamemodify(buffer.name, ":t")
+				max_filename_width = math.max(max_filename_width, vim.fn.strwidth(display_path))
 			end
 			total_width = total_width + max_filename_width
 		end
@@ -557,6 +654,9 @@ local function render_buffers()
 	local lines = {}
 	local window_width = vim.api.nvim_win_get_width(state.win)
 
+	-- Get display paths with recursive expansion for duplicates
+	local display_paths = get_display_paths(buffers)
+
 	for _, buffer in ipairs(buffers) do
 		local line_content
 		local should_show_char = false
@@ -594,7 +694,8 @@ local function render_buffers()
 			end
 
 			if show_filename then
-				local filename = vim.fn.fnamemodify(buffer.name, ":t")
+				-- Use the recursively-expanded display path
+				local filename = display_paths[buffer.id] or vim.fn.fnamemodify(buffer.name, ":t")
 				table.insert(parts, filename)
 			end
 
@@ -693,7 +794,8 @@ local function render_buffers()
 
 			-- Highlight filename part (use same color as stick for now)
 			if show_filename then
-				local filename = vim.fn.fnamemodify(buffer.name, ":t")
+				-- Use the recursively-expanded display path
+				local filename = display_paths[buffer.id] or vim.fn.fnamemodify(buffer.name, ":t")
 				local filename_width = vim.fn.strwidth(filename)
 				local hl_group
 				if buffer.is_modified then

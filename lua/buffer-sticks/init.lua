@@ -53,6 +53,8 @@ local state = {
 ---@field padding BufferSticksPadding Padding inside the window
 ---@field active_char string Character to display for the active buffer
 ---@field inactive_char string Character to display for inactive buffers
+---@field alternate_char string Character to display for the alternate buffer
+---@field alternate_modified_char string Character to display for the alternate modified buffer
 ---@field active_modified_char string Character to display for the active modified buffer
 ---@field inactive_modified_char string Character to display for inactive modified buffers
 ---@field transparent boolean Whether the background should be transparent
@@ -67,8 +69,10 @@ local config = {
 	padding = { top = 0, right = 1, bottom = 0, left = 1 },
 	active_char = "──",
 	inactive_char = " ─",
+	alternate_char = " ─",
 	active_modified_char = "──",
 	inactive_modified_char = " ─",
+	alternate_modified_char = "*─",
 	transparent = true,
 	auto_hide = true,
 	label = { show = "jump" },
@@ -444,6 +448,8 @@ local function calculate_required_width()
 				+ math.max(
 					vim.fn.strwidth(config.active_char),
 					vim.fn.strwidth(config.inactive_char),
+					vim.fn.strwidth(config.alternate_char),
+					vim.fn.strwidth(config.alternate_modified_char),
 					vim.fn.strwidth(config.active_modified_char),
 					vim.fn.strwidth(config.inactive_modified_char)
 				)
@@ -497,6 +503,8 @@ local function calculate_required_width()
 		max_width = math.max(
 			vim.fn.strwidth(config.active_char),
 			vim.fn.strwidth(config.inactive_char),
+			vim.fn.strwidth(config.alternate_char),
+			vim.fn.strwidth(config.alternate_modified_char),
 			vim.fn.strwidth(config.active_modified_char),
 			vim.fn.strwidth(config.inactive_modified_char)
 		)
@@ -681,12 +689,16 @@ local function render_buffers()
 				if buffer.is_modified then
 					if buffer.is_current then
 						table.insert(parts, config.active_modified_char)
+					elseif buffer.is_alternate then
+						table.insert(parts, config.alternate_modified_char)
 					else
 						table.insert(parts, config.inactive_modified_char)
 					end
 				else
 					if buffer.is_current then
 						table.insert(parts, config.active_char)
+					elseif buffer.is_alternate then
+						table.insert(parts, config.alternate_char)
 					else
 						table.insert(parts, config.inactive_char)
 					end
@@ -713,12 +725,16 @@ local function render_buffers()
 			if buffer.is_modified then
 				if buffer.is_current then
 					line_content = config.active_modified_char .. " " .. buffer.label
+				elseif buffer.is_alternate then
+					line_content = config.alternate_modified_char .. " " .. buffer.label
 				else
 					line_content = config.inactive_modified_char .. " " .. buffer.label
 				end
 			else
 				if buffer.is_current then
 					line_content = config.active_char .. " " .. buffer.label
+				elseif buffer.is_alternate then
+					line_content = config.alternate_char .. " " .. buffer.label
 				else
 					line_content = config.inactive_char .. " " .. buffer.label
 				end
@@ -727,12 +743,16 @@ local function render_buffers()
 			if buffer.is_modified then
 				if buffer.is_current then
 					line_content = config.active_modified_char
+				elseif buffer.is_alternate then
+					line_content = config.alternate_modified_char
 				else
 					line_content = config.inactive_modified_char
 				end
 			else
 				if buffer.is_current then
 					line_content = config.active_char
+				elseif buffer.is_alternate then
+					line_content = config.alternate_char
 				else
 					line_content = config.inactive_char
 				end
@@ -775,11 +795,27 @@ local function render_buffers()
 				local stick_char
 				local hl_group
 				if buffer.is_modified then
-					stick_char = buffer.is_current and config.active_modified_char or config.inactive_modified_char
-					hl_group = buffer.is_current and "BufferSticksActiveModified" or "BufferSticksInactiveModified"
+					if buffer.is_current then
+						stick_char = config.active_modified_char
+						hl_group = "BufferSticksActiveModified"
+					elseif buffer.is_alternate then
+						stick_char = config.alternate_modified_char
+						hl_group = "BufferSticksAlternateModified"
+					else
+						stick_char = config.inactive_modified_char
+						hl_group = "BufferSticksInactiveModified"
+					end
 				else
-					stick_char = buffer.is_current and config.active_char or config.inactive_char
-					hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+					if buffer.is_current then
+						stick_char = config.active_char
+						hl_group = "BufferSticksActive"
+					elseif buffer.is_alternate then
+						stick_char = config.alternate_char
+						hl_group = "BufferSticksAlternate"
+					else
+						stick_char = config.inactive_char
+						hl_group = "BufferSticksInactive"
+					end
 				end
 				local stick_width = vim.fn.strwidth(stick_char)
 				vim.hl.range(
@@ -799,9 +835,21 @@ local function render_buffers()
 				local filename_width = vim.fn.strwidth(filename)
 				local hl_group
 				if buffer.is_modified then
-					hl_group = buffer.is_current and "BufferSticksActiveModified" or "BufferSticksInactiveModified"
+					if buffer.is_current then
+						hl_group = "BufferSticksActiveModified"
+					elseif buffer.is_alternate then
+						hl_group = "BufferSticksAlternateModified"
+					else
+						hl_group = "BufferSticksInactiveModified"
+					end
 				else
-					hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+					if buffer.is_current then
+						hl_group = "BufferSticksActive"
+					elseif buffer.is_alternate then
+						hl_group = "BufferSticksAlternate"
+					else
+						hl_group = "BufferSticksInactive"
+					end
 				end
 				vim.hl.range(
 					state.buf,

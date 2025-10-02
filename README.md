@@ -62,8 +62,10 @@ return {
 			filter = { buftypes = { "terminal" } },
 			highlights = {
                 active = { link = "Statement" },
+                alternate = { link = "StorageClass" },
                 inactive = { link = "Whitespace" },
                 active_modified = { link = "Constant" },
+                alternate_modified = { link = "Constant" },
                 inactive_modified = { link = "Constant" },
                 label = { link = "Comment" },
 			},
@@ -95,8 +97,10 @@ require("buffer-sticks").setup({
   -- },
   highlights = {
     active = { fg = "#bbbbbb" },
+    alternate = { fg = "#888888" },
     inactive = { fg = "#333333" },
     active_modified = { fg = "#ffffff" }, 
+    alternate_modified = { fg = "#dddddd" },
     inactive_modified = { fg = "#999999" },
     label = { fg = "#aaaaaa", italic = true }
   }
@@ -149,8 +153,10 @@ You can use hex colors:
 ```lua
 highlights = {
   active = { fg = "#bbbbbb" },
+  alternate = { fg = "#888888" },
   inactive = { fg = "#333333" },
   active_modified = { fg = "#ffffff" }, 
+  alternate_modified = { fg = "#dddddd" },
   inactive_modified = { fg = "#999999" },
   label = { fg = "#aaaaaa", italic = true }
 }
@@ -161,8 +167,10 @@ Or link to existing highlight groups:
 ```lua
 highlights = {
   active = { link = "Statement" },
+  alternate = { link = "StorageClass" },
   inactive = { link = "Whitespace" },
   active_modified = { link = "Constant" },
+  alternate_modified = { link = "Constant" },
   inactive_modified = { link = "Constant" },
   label = { link = "Comment" },
 }

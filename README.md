@@ -1,6 +1,6 @@
 # buffer-sticks.nvim
 
-A neovim plugin that displays a vertical indicator showing open buffers.
+A neovim plugin that displays a vertical indicator showing open buffers and doubles as a customizable buffer picker.
 
 ![Demo](assets/demo.png)
 
@@ -12,7 +12,8 @@ Jump mode for quick buffer navigation:
 
 - Visual representation of open buffers
 - Highlights the currently active buffer
-- Jump mode for quick buffer navigation by typing characters
+- List mode for quick buffer navigation or closing by typing characters
+- Custom action functions for building buffer pickers
 - Configurable positioning and appearance
 - Transparent background support
 - Persists highlight configuration across colorscheme changes
@@ -89,11 +90,11 @@ require("buffer-sticks").setup({
   alternate_modified_char = " ─", -- Character for alternate modified buffer (unsaved changes)
   transparent = true,           -- Remove background color (shows terminal/editor background)
   auto_hide = true,                -- Auto-hide when cursor is over float (default: true)
-  label = { show = "jump" },       -- Label display: "always", "jump", or "never"
-  jump = {
-    show = { "filename", "space", "label" }, -- Jump mode display options
+  label = { show = "list" },       -- Label display: "always", "list", or "never"
+  list = {
+    show = { "filename", "space", "label" }, -- List mode display options
     keys = {
-      close_buffer = "<C-q>",      -- Key to close buffer in jump mode
+      close_buffer = "<C-q>",      -- Key to close buffer in list mode
     },
   }
   -- winblend = 100,                    -- Window blend level (0-100, 0=opaque, 100=fully blended)
@@ -126,27 +127,61 @@ BufferSticks.show()
 -- Hide
 BufferSticks.hide()
 
--- Enter jump mode to navigate by typing
+-- Enter list mode to navigate buffers
+BufferSticks.list({ action = "open" })
+
+-- Enter list mode to close buffers
+BufferSticks.list({ action = "close" })
+
+-- Alias for jumping to buffers (same as list with action="open")
 BufferSticks.jump()
+
+-- Alias for closing buffers (same as list with action="close")
+BufferSticks.close()
+
+-- Custom action function (buffer picker)
+BufferSticks.list({
+  action = function(buffer, leave)
+    -- Do something with buffer.id, buffer.name, etc.
+    print("Selected buffer: " .. buffer.name)
+    leave() -- Call this to leave list mode
+  end
+})
 ```
 
-## Jump Mode
+## List Mode
 
-Jump mode allows you to quickly navigate to buffers by typing their first character(s):
+List mode allows you to quickly navigate to or close buffers by typing their first character(s):
 
-1. Call `BufferSticks.jump()`
+**Navigate to buffers:**
+1. Call `BufferSticks.list({ action = "open" })` or `BufferSticks.jump()`
 2. Type the first character of the buffer you want to jump to
 3. If multiple buffers match, continue typing more characters
-4. Press `Ctrl-Q` (configurable) to close the current buffer
+4. Press `Ctrl-Q` (configurable) to close the current active buffer
 5. Press `Esc` or `Ctrl-C` to cancel
+
+**Close buffers:**
+1. Call `BufferSticks.list({ action = "close" })` or `BufferSticks.close()`
+2. Type the first character of the buffer you want to close
+3. If multiple buffers match, continue typing more characters
+4. Press `Ctrl-Q` (configurable) to close the current active buffer
+5. Press `Esc` or `Ctrl-C` to cancel
+
+**Custom action function (buffer picker):**
+1. Call `BufferSticks.list({ action = function(buffer, leave) ... end })`
+2. Type the first character to select a buffer
+3. When a match is found, your function is called with:
+   - `buffer`: The selected buffer info (with `id`, `name`, `label`, etc.)
+   - `leave`: Function to call when you're done to exit list mode
+4. You control when to exit by calling `leave()`
 
 **Label Display Options:**
 - `label = { show = "always" }` - Always show buffer name labels
-- `label = { show = "jump" }` - Only show labels when in jump mode (default)
+- `label = { show = "list" }` - Only show labels when in list mode (default)
 - `label = { show = "never" }` - Never show labels
 
-**Jump Mode Display Options:**
-- **Default**: `jump = { show = { "filename", "space", "label" } }`
+**List Mode Display Options:**
+- **Default**: `list = { show = { "filename", "space", "label" } }`
 
 **Available elements:**
 - `"filename"` - Full filename
@@ -190,4 +225,6 @@ highlights = {
 - `toggle()` - Toggle buffer sticks visibility
 - `show()` - Show buffer sticks
 - `hide()` - Hide buffer sticks
-- `jump()` - Enter jump mode for quick buffer navigation
+- `list(opts)` - Enter list mode with action ("open", "close", or custom function)
+- `jump()` - Enter list mode for quick buffer navigation (alias for `list({ action = "open" })`)
+- `close()` - Enter list mode to close buffers (alias for `list({ action = "close" })`)

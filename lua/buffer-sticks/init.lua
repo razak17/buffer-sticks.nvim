@@ -37,8 +37,12 @@ local state = {
 ---@field bottom integer Bottom padding inside the window
 ---@field left integer Left padding inside the window
 
+---@class BufferSticksJumpKeys
+---@field close_buffer string Key combination to close buffer in jump mode
+
 ---@class BufferSticksJump
 ---@field show string[] What to show in jump mode: "filename", "space", "label", "stick"
+---@field keys BufferSticksJumpKeys Key mappings for jump mode
 
 ---@class BufferSticksLabel
 ---@field show "always"|"jump"|"never" When to show buffer name characters
@@ -76,7 +80,12 @@ local config = {
 	transparent = true,
 	auto_hide = true,
 	label = { show = "jump" },
-	jump = { show = { "filename", "space", "label" } },
+	jump = {
+		show = { "filename", "space", "label" },
+		keys = {
+			close_buffer = "<C-q>",
+		},
+	},
 	highlights = {
 		active = { fg = "#bbbbbb" },
 		alternate = { fg = "#888888" },
@@ -955,6 +964,20 @@ function M.jump()
 			state.jump_mode = false
 			state.jump_input = ""
 			create_or_update_floating_window() -- Resize back to normal mode
+			render_buffers()
+			return
+		end
+
+		-- Handle configured close buffer key (default ctrl-q)
+		local close_key = config.jump.keys.close_buffer or "<C-q>"
+		if close_key == "<C-q>" and char == 17 then -- ctrl-q
+			-- Always close the current active buffer
+			local current_buf = vim.api.nvim_get_current_buf()
+			vim.api.nvim_buf_delete(current_buf, { force = false })
+
+			state.jump_mode = false
+			state.jump_input = ""
+			create_or_update_floating_window()
 			render_buffers()
 			return
 		end

@@ -90,7 +90,12 @@ require("buffer-sticks").setup({
   transparent = true,           -- Remove background color (shows terminal/editor background)
   auto_hide = true,                -- Auto-hide when cursor is over float (default: true)
   label = { show = "jump" },       -- Label display: "always", "jump", or "never"
-  jump = { show = { "filename", "space", "label" } }, -- Jump mode display options
+  jump = {
+    show = { "filename", "space", "label" }, -- Jump mode display options
+    keys = {
+      close_buffer = "<C-q>",      -- Key to close buffer in jump mode
+    },
+  }
   -- winblend = 100,                    -- Window blend level (0-100, 0=opaque, 100=fully blended)
   -- filter = {
   --   filetypes = { "help", "qf" },    -- Exclude by filetype (also: "NvimTree", "neo-tree", "Trouble")
@@ -132,7 +137,8 @@ Jump mode allows you to quickly navigate to buffers by typing their first charac
 1. Call `BufferSticks.jump()`
 2. Type the first character of the buffer you want to jump to
 3. If multiple buffers match, continue typing more characters
-4. Press `Esc` or `Ctrl-C` to cancel
+4. Press `Ctrl-Q` (configurable) to close the current buffer
+5. Press `Esc` or `Ctrl-C` to cancel
 
 **Label Display Options:**
 - `label = { show = "always" }` - Always show buffer name labels

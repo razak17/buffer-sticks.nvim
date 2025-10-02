@@ -75,8 +75,10 @@ local config = {
 	jump = { show = { "filename", "space", "label" } },
 	highlights = {
 		active = { fg = "#bbbbbb" },
+		alternate = { fg = "#888888" },
 		inactive = { fg = "#333333" },
 		active_modified = { fg = "#ffffff" },
+		alternate_modified = { fg = "#dddddd" },
 		inactive_modified = { fg = "#999999" },
 		label = { fg = "#aaaaaa", italic = true },
 	},
@@ -86,6 +88,7 @@ local config = {
 ---@field id integer Buffer ID
 ---@field name string Buffer name/path
 ---@field is_current boolean Whether this is the currently active buffer
+---@field is_alternate boolean Whether this is the alternate buffer
 ---@field is_modified boolean Whether this buffer has unsaved changes
 ---@field label string Generated unique label for this buffer
 
@@ -216,6 +219,7 @@ end
 local function get_buffer_list()
 	local buffers = {}
 	local current_buf = vim.api.nvim_get_current_buf()
+	local alternate_buf = vim.fn.bufnr("#")
 	local buffer_ids = {}
 
 	-- Collect filtered buffers
@@ -262,6 +266,7 @@ local function get_buffer_list()
 					name = buf_name,
 					is_current = buf == current_buf,
 					is_modified = vim.bo[buf].modified,
+					is_alternate = buf == alternate_buf,
 				})
 				table.insert(buffer_ids, buf)
 			end
@@ -736,9 +741,21 @@ local function render_buffers()
 			-- Normal mode: highlight entire line
 			local hl_group
 			if buffer.is_modified then
-				hl_group = buffer.is_current and "BufferSticksActiveModified" or "BufferSticksInactiveModified"
+				if buffer.is_current then
+					hl_group = "BufferSticksActiveModified"
+				elseif buffer.is_alternate then
+					hl_group = "BufferSticksAlternateModified"
+				else
+					hl_group = "BufferSticksInactiveModified"
+				end
 			else
-				hl_group = buffer.is_current and "BufferSticksActive" or "BufferSticksInactive"
+				if buffer.is_current then
+					hl_group = "BufferSticksActive"
+				elseif buffer.is_alternate then
+					hl_group = "BufferSticksAlternate"
+				else
+					hl_group = "BufferSticksInactive"
+				end
 			end
 			vim.hl.range(state.buf, ns_id, hl_group, { line_idx, 0 }, { line_idx, -1 })
 		end
@@ -871,6 +888,16 @@ function M.setup(opts)
 			vim.api.nvim_set_hl(0, "BufferSticksActive", active_hl)
 		end
 
+		if config.highlights.alternate.link then
+			vim.api.nvim_set_hl(0, "BufferSticksAlternate", { link = config.highlights.alternate.link })
+		else
+			local alternate_hl = vim.deepcopy(config.highlights.alternate)
+			if is_transparent then
+				alternate_hl.bg = nil -- Remove background for transparency
+			end
+			vim.api.nvim_set_hl(0, "BufferSticksAlternate", alternate_hl)
+		end
+
 		if config.highlights.inactive.link then
 			vim.api.nvim_set_hl(0, "BufferSticksInactive", { link = config.highlights.inactive.link })
 		else
@@ -890,6 +917,22 @@ function M.setup(opts)
 					active_modified_hl.bg = nil -- Remove background for transparency
 				end
 				vim.api.nvim_set_hl(0, "BufferSticksActiveModified", active_modified_hl)
+			end
+		end
+
+		if config.highlights.alternate_modified then
+			if config.highlights.alternate_modified.link then
+				vim.api.nvim_set_hl(
+					0,
+					"BufferSticksAlternateModified",
+					{ link = config.highlights.alternate_modified.link }
+				)
+			else
+				local alternate_modified_hl = vim.deepcopy(config.highlights.alternate_modified)
+				if is_transparent then
+					alternate_modified_hl.bg = nil -- Remove background for transparency
+				end
+				vim.api.nvim_set_hl(0, "BufferSticksAlternateModified", alternate_modified_hl)
 			end
 		end
 

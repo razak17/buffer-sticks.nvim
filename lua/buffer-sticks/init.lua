@@ -367,14 +367,20 @@ local function get_display_paths(buffers)
 		if filename ~= "" then
 			table.insert(components, filename)
 
-			-- Get parent directories
+			-- Get parent directories - Cross-platform root detection
 			local parent = vim.fn.fnamemodify(full_path, ":h")
-			while parent ~= "" and parent ~= "." and parent ~= "/" do
+			while parent ~= "" and parent ~= "." do
+				local new_parent = vim.fn.fnamemodify(parent, ":h")
+				-- Stop if parent doesn't change (reached filesystem root)
+				if new_parent == parent then
+					break
+				end
+
 				local dir = vim.fn.fnamemodify(parent, ":t")
 				if dir ~= "" then
 					table.insert(components, dir)
 				end
-				parent = vim.fn.fnamemodify(parent, ":h")
+				parent = new_parent
 			end
 		end
 

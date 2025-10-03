@@ -8,7 +8,7 @@
 local M = {}
 
 ---@class BufferSticksState
----@field win integer Window handle for the floating window
+---@field wins table<integer, integer> Map of tabpage to window handle
 ---@field buf integer Buffer handle for the display buffer
 ---@field visible boolean Whether the buffer sticks are currently visible
 ---@field cached_buffer_ids integer[] Cached list of buffer IDs for label generation
@@ -17,7 +17,7 @@ local M = {}
 ---@field list_input string Current input in list mode
 ---@field list_action string Current action in list mode ("open" or "close")
 local state = {
-	win = -1,
+	wins = {},
 	buf = -1,
 	visible = false,
 	list_mode = false,
@@ -586,8 +586,10 @@ local function handle_cursor_move()
 	if collision and state.visible and not state.auto_hidden then
 		-- Cursor entered float area, hide it immediately
 		state.auto_hidden = true
-		if vim.api.nvim_win_is_valid(state.win) then
-			vim.api.nvim_win_hide(state.win)
+		local current_tab = vim.api.nvim_get_current_tabpage()
+		local win = state.wins[current_tab]
+		if win and vim.api.nvim_win_is_valid(win) then
+			vim.api.nvim_win_hide(win)
 		end
 	elseif not collision and state.auto_hidden then
 		-- Cursor left float area, show it immediately
@@ -637,30 +639,23 @@ local function create_or_update_floating_window()
 		-- Add a background highlight group if not transparent
 	end
 
-	-- Check if window is valid AND in current tabpage
-	local win_is_valid_in_current_tab = false
-	if vim.api.nvim_win_is_valid(state.win) then
-		-- Check if window exists in current tabpage
-		local current_tab_wins = vim.api.nvim_tabpage_list_wins(0)
-		for _, win in ipairs(current_tab_wins) do
-			if win == state.win then
-				win_is_valid_in_current_tab = true
-				break
-			end
-		end
-	end
+	-- Get current tabpage and its window handle
+	local current_tab = vim.api.nvim_get_current_tabpage()
+	local win = state.wins[current_tab]
 
-	if win_is_valid_in_current_tab then
-		vim.api.nvim_win_set_config(state.win, win_config)
+	-- Check if window is valid in current tabpage
+	if win and vim.api.nvim_win_is_valid(win) then
+		vim.api.nvim_win_set_config(win, win_config)
 	else
-		state.win = vim.api.nvim_open_win(state.buf, false, win_config)
+		win = vim.api.nvim_open_win(state.buf, false, win_config)
+		state.wins[current_tab] = win
 	end
 
 	-- Store window position for collision detection
 	state.win_pos = { col = col, row = row, width = width, height = height }
 
 	---@type vim.api.keyset.option
-	local win_opts = { win = state.win }
+	local win_opts = { win = win }
 
 	-- Set winblend if specified
 	if config.winblend then
@@ -674,19 +669,22 @@ local function create_or_update_floating_window()
 		vim.api.nvim_set_option_value("winhl", "Normal:NONE", win_opts)
 	end
 
-	return { buf = state.buf, win = state.win }
+	return { buf = state.buf, win = win }
 end
 
 ---Render buffer indicators in the floating window
 ---Updates the buffer content and applies appropriate highlighting
 local function render_buffers()
-	if not vim.api.nvim_buf_is_valid(state.buf) or not vim.api.nvim_win_is_valid(state.win) then
+	local current_tab = vim.api.nvim_get_current_tabpage()
+	local win = state.wins[current_tab]
+
+	if not vim.api.nvim_buf_is_valid(state.buf) or not win or not vim.api.nvim_win_is_valid(win) then
 		return
 	end
 
 	local buffers = get_buffer_list()
 	local lines = {}
-	local window_width = vim.api.nvim_win_get_width(state.win)
+	local window_width = vim.api.nvim_win_get_width(win)
 
 	-- Get display paths with recursive expansion for duplicates
 	local display_paths = get_display_paths(buffers)
@@ -948,14 +946,20 @@ function M.show()
 end
 
 ---Hide the buffer sticks floating window
----Closes the window and updates the visibility state
+---Closes the window in all tabs and updates the visibility state
 function M.hide()
-	if vim.api.nvim_win_is_valid(state.win) then
-		vim.api.nvim_win_close(state.win, true)
-		state.win = -1
-	end
+	-- Set state first to prevent autocmds from re-showing
 	state.visible = false
 	state.auto_hidden = false -- Reset auto-hide state when manually hidden
+
+	-- Close windows in all tabs
+	for tab, win in pairs(state.wins) do
+		if vim.api.nvim_win_is_valid(win) then
+			pcall(vim.api.nvim_win_close, win, true)
+		end
+	end
+
+	state.wins = {}
 end
 
 ---Enter list mode to navigate or close buffers by typing characters

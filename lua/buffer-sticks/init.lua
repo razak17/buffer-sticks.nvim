@@ -939,10 +939,15 @@ end
 ---Show the buffer sticks floating window
 ---Creates the window and renders the current buffer state
 function M.show()
-	create_or_update_floating_window()
-	render_buffers()
+	vim.schedule(function()
+		if not state.visible then
+			return
+		end
+		create_or_update_floating_window()
+		render_buffers()
+		state.auto_hidden = false -- Reset auto-hide state when manually shown
+	end)
 	state.visible = true
-	state.auto_hidden = false -- Reset auto-hide state when manually shown
 end
 
 ---Hide the buffer sticks floating window
@@ -1192,7 +1197,7 @@ function M.setup(opts)
 			state.cached_labels = {}
 
 			if state.visible then
-				vim.schedule(M.show) -- Refresh the display
+				M.show() -- Refresh the display
 			end
 		end,
 	})
@@ -1201,10 +1206,12 @@ function M.setup(opts)
 	vim.api.nvim_create_autocmd({ "BufModifiedSet", "TextChanged", "TextChangedI", "BufWritePost" }, {
 		group = augroup,
 		callback = function()
-			if state.visible then
-				-- Just re-render, don't need to recreate window
-				vim.schedule(render_buffers)
-			end
+			vim.schedule(function()
+				if state.visible then
+					-- Just re-render, don't need to recreate window
+					render_buffers()
+				end
+			end)
 		end,
 	})
 
@@ -1221,7 +1228,7 @@ function M.setup(opts)
 		group = augroup,
 		callback = function()
 			if state.visible then
-				vim.schedule(M.show) -- Refresh the display and position
+				M.show() -- Refresh the display and position
 			end
 		end,
 	})
@@ -1231,7 +1238,7 @@ function M.setup(opts)
 		group = augroup,
 		callback = function()
 			if state.visible then
-				vim.schedule(M.show) -- Recreate window in new tab
+				M.show() -- Recreate window in new tab
 			end
 		end,
 	})

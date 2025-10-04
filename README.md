@@ -13,6 +13,7 @@ Jump mode for quick buffer navigation:
 - Visual representation of open buffers
 - Highlights for active, alternate, inactive, and modified buffers
 - List mode for quick buffer navigation or closing by typing characters
+- Filter mode with fuzzy search for finding buffers quickly
 - Custom action functions for building buffer pickers
 - Configurable positioning and appearance
 - Transparent background support
@@ -88,6 +89,8 @@ return {
                 alternate_modified = { link = "Constant" },
                 inactive_modified = { link = "Constant" },
                 label = { link = "Comment" },
+                filter_selected = { link = "Statement" },
+                filter_title = { link = "Comment" },
 			},
 		})
 		sticks.show()
@@ -115,6 +118,19 @@ require("buffer-sticks").setup({
     keys = {
       close_buffer = "<C-q>",      -- Key to close buffer in list mode
     },
+    filter = {
+      title = "➜ ",                -- Filter prompt title when input is not empty
+      title_empty = "Filter",       -- Filter prompt title when input is empty
+      active_indicator = "•",       -- Symbol for selected item in filter mode
+      fuzzy_cutoff = 100,           -- Cutoff value for fuzzy matching algorithm (default: 100)
+      keys = {
+        enter = "/",                -- Key to enter filter mode
+        confirm = "<CR>",           -- Key to confirm selection
+        exit = "<Esc>",             -- Key to exit filter mode
+        move_up = "<Up>",           -- Key to move selection up
+        move_down = "<Down>",       -- Key to move selection down
+      },
+    },
   }
   -- winblend = 100,                    -- Window blend level (0-100, 0=opaque, 100=fully blended)
   -- filter = {
@@ -126,10 +142,12 @@ require("buffer-sticks").setup({
     active = { fg = "#bbbbbb" },
     alternate = { fg = "#888888" },
     inactive = { fg = "#333333" },
-    active_modified = { fg = "#ffffff" }, 
+    active_modified = { fg = "#ffffff" },
     alternate_modified = { fg = "#dddddd" },
     inactive_modified = { fg = "#999999" },
-    label = { fg = "#aaaaaa", italic = true }
+    label = { fg = "#aaaaaa", italic = true },
+    filter_selected = { fg = "#bbbbbb", italic = true },
+    filter_title = { fg = "#aaaaaa", italic = true },
   }
 })
 ```
@@ -176,15 +194,24 @@ List mode allows you to quickly navigate to or close buffers by typing their fir
 1. Call `BufferSticks.list({ action = "open" })` or `BufferSticks.jump()`
 2. Type the first character of the buffer you want to jump to
 3. If multiple buffers match, continue typing more characters
-4. Press `Ctrl-Q` (configurable) to close the current active buffer
-5. Press `Esc` or `Ctrl-C` to cancel
+4. Press `/` (configurable) to enter filter mode for fuzzy search
+5. Press `Ctrl-Q` (configurable) to close the current active buffer
+6. Press `Esc` or `Ctrl-C` to cancel
 
 **Close buffers:**
 1. Call `BufferSticks.list({ action = "close" })` or `BufferSticks.close()`
 2. Type the first character of the buffer you want to close
 3. If multiple buffers match, continue typing more characters
-4. Press `Ctrl-Q` (configurable) to close the current active buffer
-5. Press `Esc` or `Ctrl-C` to cancel
+4. Press `/` (configurable) to enter filter mode for fuzzy search
+5. Press `Ctrl-Q` (configurable) to close the current active buffer
+6. Press `Esc` or `Ctrl-C` to cancel
+
+**Filter mode:**
+1. While in list mode, press `/` (configurable) to enter filter mode
+2. Type to fuzzy search through buffers in real-time
+3. Use `Up`/`Down` arrows (configurable) to navigate filtered results
+4. Press `Enter` to select the highlighted buffer
+5. Press `Esc` to exit filter mode back to list mode
 
 **Custom action function (buffer picker):**
 1. Call `BufferSticks.list({ action = function(buffer, leave) ... end })`
@@ -218,10 +245,12 @@ highlights = {
   active = { fg = "#bbbbbb" },
   alternate = { fg = "#888888" },
   inactive = { fg = "#333333" },
-  active_modified = { fg = "#ffffff" }, 
+  active_modified = { fg = "#ffffff" },
   alternate_modified = { fg = "#dddddd" },
   inactive_modified = { fg = "#999999" },
-  label = { fg = "#aaaaaa", italic = true }
+  label = { fg = "#aaaaaa", italic = true },
+  filter_selected = { fg = "#bbbbbb", italic = true },
+  filter_title = { fg = "#aaaaaa", italic = true },
 }
 ```
 
@@ -236,6 +265,8 @@ highlights = {
   alternate_modified = { link = "Constant" },
   inactive_modified = { link = "Constant" },
   label = { link = "Comment" },
+  filter_selected = { link = "Statement" },
+  filter_title = { link = "Comment" },
 }
 ```
 

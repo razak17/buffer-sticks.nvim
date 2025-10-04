@@ -7,6 +7,117 @@
 ---@field hide function Hide the buffer sticks
 local M = {}
 
+-- Fuzzy matching helpers (extracted from mini.fuzzy) =======================
+local function string_to_letters(s)
+	return vim.tbl_map(vim.pesc, vim.split(s, ""))
+end
+
+local function score_positions(positions, cutoff)
+	if positions == nil or #positions == 0 then
+		return -1
+	end
+	local first, last = positions[1], positions[#positions]
+	return cutoff * math.min(last - first + 1, cutoff) + math.min(first, cutoff)
+end
+
+local function find_best_positions(letters, candidate, cutoff)
+	local n_candidate, n_letters = #candidate, #letters
+	if n_letters == 0 then
+		return {}
+	end
+	if n_candidate < n_letters then
+		return nil
+	end
+
+	-- Search forward to find matching positions with left-most last letter match
+	local pos_last = 0
+	for let_i = 1, #letters do
+		pos_last = candidate:find(letters[let_i], pos_last + 1)
+		if not pos_last then
+			break
+		end
+	end
+
+	-- Candidate is matched only if word's last letter is found
+	if not pos_last then
+		return nil
+	end
+
+	-- If there is only one letter, it is already the best match
+	if n_letters == 1 then
+		return { pos_last }
+	end
+
+	-- Compute best match positions by iteratively checking all possible last
+	-- letter matches. At end of each iteration best_pos_last holds best match
+	-- for last letter among all previously checked such matches.
+	local best_pos_last, best_width = pos_last, math.huge
+	local rev_candidate = candidate:reverse()
+
+	while pos_last do
+		-- Simulate computing best match positions ending exactly at pos_last by
+		-- going backwards from current last letter match.
+		local rev_first = n_candidate - pos_last + 1
+		for i = #letters - 1, 1, -1 do
+			rev_first = rev_candidate:find(letters[i], rev_first + 1)
+		end
+		local first = n_candidate - rev_first + 1
+		local width = math.min(pos_last - first + 1, cutoff)
+
+		if width < best_width then
+			best_pos_last, best_width = pos_last, width
+		end
+
+		-- Advance iteration
+		pos_last = candidate:find(letters[n_letters], pos_last + 1)
+	end
+
+	-- Actually compute best matched positions from best last letter match
+	local best_positions = { best_pos_last }
+	local rev_pos = n_candidate - best_pos_last + 1
+	for i = #letters - 1, 1, -1 do
+		rev_pos = rev_candidate:find(letters[i], rev_pos + 1)
+		table.insert(best_positions, 1, n_candidate - rev_pos + 1)
+	end
+
+	return best_positions
+end
+
+local function make_filter_indexes(word, candidate_array, cutoff)
+	local res, letters = {}, string_to_letters(word)
+	for i, cand in ipairs(candidate_array) do
+		local positions = find_best_positions(letters, cand, cutoff)
+		if positions ~= nil then
+			table.insert(res, { index = i, score = score_positions(positions, cutoff) })
+		end
+	end
+	return res
+end
+
+local function compare_filter_indexes(a, b)
+	return a.score < b.score or (a.score == b.score and a.index < b.index)
+end
+
+local function filter_by_indexes(candidate_array, ids)
+	local res, res_ids = {}, {}
+	for _, id in pairs(ids) do
+		table.insert(res, candidate_array[id.index])
+		table.insert(res_ids, id.index)
+	end
+	return res, res_ids
+end
+
+local function fuzzy_filtersort(word, candidate_array, cutoff)
+	cutoff = cutoff or 100
+	-- Use 'smart case': case insensitive if word is lowercase
+	local cand_array = word == word:lower() and vim.tbl_map(string.lower, candidate_array) or candidate_array
+	local filter_ids = make_filter_indexes(word, cand_array, cutoff)
+	table.sort(filter_ids, compare_filter_indexes)
+	return filter_by_indexes(candidate_array, filter_ids)
+end
+
+-- End fuzzy matching helpers ===============================================
+
 ---@class BufferSticksState
 ---@field wins table<integer, integer> Map of tabpage to window handle
 ---@field buf integer Buffer handle for the display buffer
@@ -16,6 +127,9 @@ local M = {}
 ---@field list_mode boolean Whether list mode is active
 ---@field list_input string Current input in list mode
 ---@field list_action string Current action in list mode ("open" or "close")
+---@field filter_mode boolean Whether filter mode is active
+---@field filter_input string Current filter input string
+---@field filter_selected_index integer Currently selected buffer index in filtered results
 local state = {
 	wins = {},
 	buf = -1,
@@ -23,6 +137,9 @@ local state = {
 	list_mode = false,
 	list_input = "",
 	list_action = "open",
+	filter_mode = false,
+	filter_input = "",
+	filter_selected_index = 1,
 	cached_buffer_ids = {},
 	cached_labels = {},
 	auto_hidden = false,
@@ -44,9 +161,24 @@ local state = {
 ---@class BufferSticksListKeys
 ---@field close_buffer string Key combination to close buffer in list mode
 
+---@class BufferSticksFilterKeys
+---@field enter string Key to enter filter mode
+---@field confirm string Key to confirm selection in filter mode
+---@field exit string Key to exit filter mode
+---@field move_up string Key to move selection up in filter mode
+---@field move_down string Key to move selection down in filter mode
+
+---@class BufferSticksListFilter
+---@field title string Title for filter prompt when filter input is not empty
+---@field title_empty string Title for filter prompt when filter input is empty
+---@field active_indicator string Symbol to show for the selected item in filter mode
+---@field fuzzy_cutoff number Cutoff value for fuzzy matching algorithm (default: 100)
+---@field keys BufferSticksFilterKeys Key mappings for filter mode
+
 ---@class BufferSticksList
 ---@field show string[] What to show in list mode: "filename", "space", "label", "stick"
 ---@field keys BufferSticksListKeys Key mappings for list mode
+---@field filter BufferSticksListFilter Filter configuration
 
 ---@class BufferSticksLabel
 ---@field show "always"|"list"|"never" When to show buffer name characters
@@ -89,6 +221,19 @@ local config = {
 		keys = {
 			close_buffer = "<C-q>",
 		},
+		filter = {
+			title = "➜ ",
+			title_empty = "Filter",
+			active_indicator = "•",
+			fuzzy_cutoff = 100,
+			keys = {
+				enter = "/",
+				confirm = "<CR>",
+				exit = "<Esc>",
+				move_up = "<Up>",
+				move_down = "<Down>",
+			},
+		},
 	},
 	highlights = {
 		active = { fg = "#bbbbbb" },
@@ -98,6 +243,8 @@ local config = {
 		alternate_modified = { fg = "#dddddd" },
 		inactive_modified = { fg = "#999999" },
 		label = { fg = "#aaaaaa", italic = true },
+		filter_selected = { fg = "#bbbbbb", italic = true },
+		filter_title = { fg = "#aaaaaa", italic = true },
 	},
 }
 
@@ -446,6 +593,18 @@ local function get_display_paths(buffers)
 	return display_paths
 end
 
+---Check if any buffer has a two-character label
+---@param buffers BufferInfo[] List of buffers to check
+---@return boolean has_two_char_label True if any buffer has a two-character label
+local function has_two_char_label(buffers)
+	for _, buffer in ipairs(buffers) do
+		if #buffer.label == 2 then
+			return true
+		end
+	end
+	return false
+end
+
 ---Calculate the required width based on current display mode and content
 ---@return number width The calculated width needed for the floating window
 local function calculate_required_width()
@@ -514,6 +673,17 @@ local function calculate_required_width()
 		end
 
 		max_width = total_width
+
+		-- If in filter mode, also consider the filter prompt width
+		if state.filter_mode then
+			local filter_config = config.list and config.list.filter or {}
+			local filter_title = #state.filter_input > 0 and (filter_config.title or "Filter: ")
+				or (filter_config.title_empty or "Filter:   ")
+			-- Add padding: 3 spaces if we have two-char labels, 2 spaces otherwise
+			local padding = has_two_char_label(buffers) and "   " or "  "
+			local filter_prompt_width = vim.fn.strwidth(filter_title .. state.filter_input .. padding)
+			max_width = math.max(max_width, filter_prompt_width)
+		end
 	else
 		-- Normal mode: check if labels should be shown
 		local should_show_labels = (config.label and config.label.show == "always")
@@ -611,6 +781,11 @@ local function create_or_update_floating_window()
 	local content_height = math.max(#buffers, 1)
 	local content_width = calculate_required_width()
 
+	-- Add extra line for filter prompt if in filter mode
+	if state.filter_mode then
+		content_height = content_height + 1
+	end
+
 	-- Add padding to window dimensions
 	local height = content_height + config.padding.top + config.padding.bottom
 	local width = content_width + config.padding.left + config.padding.right
@@ -678,6 +853,25 @@ local function create_or_update_floating_window()
 	return { buf = state.buf, win = win }
 end
 
+---Apply fuzzy filter to buffers based on current filter input
+---@param buffers BufferInfo[] List of buffers to filter
+---@param display_paths table<integer, string> Map of buffer.id to display path
+---@return integer[] filtered_indices Indices of matched buffers
+local function apply_fuzzy_filter(buffers, display_paths)
+	-- Build candidate array for filtering
+	local candidates = {}
+	for _, buffer in ipairs(buffers) do
+		local display_name = display_paths[buffer.id] or vim.fn.fnamemodify(buffer.name, ":t")
+		table.insert(candidates, display_name)
+	end
+
+	-- Apply fuzzy filter
+	local filter_config = config.list and config.list.filter or {}
+	local cutoff = filter_config.fuzzy_cutoff or 100
+	local _, filtered_indices = fuzzy_filtersort(state.filter_input, candidates, cutoff)
+	return filtered_indices
+end
+
 ---Render buffer indicators in the floating window
 ---Updates the buffer content and applies appropriate highlighting
 local function render_buffers()
@@ -695,9 +889,42 @@ local function render_buffers()
 	-- Get display paths with recursive expansion for duplicates
 	local display_paths = get_display_paths(buffers)
 
-	for _, buffer in ipairs(buffers) do
+	-- Filter buffers if in filter mode
+	local filtered_buffers = buffers
+	local filtered_indices = {}
+	if state.filter_mode and state.filter_input ~= "" then
+		filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+		filtered_buffers = {}
+		for _, idx in ipairs(filtered_indices) do
+			table.insert(filtered_buffers, buffers[idx])
+		end
+	else
+		-- No filter, use all buffers with sequential indices
+		for i = 1, #buffers do
+			table.insert(filtered_indices, i)
+		end
+	end
+
+	-- Check if we have any two-character labels (to determine if we should pad single-char labels)
+	local has_two_char = has_two_char_label(filtered_buffers)
+
+	-- Add filter prompt line if in filter mode
+	if state.filter_mode then
+		local filter_config = config.list and config.list.filter or {}
+		local filter_title = #state.filter_input > 0 and (filter_config.title or "Filter: ")
+			or (filter_config.title_empty or "Filter:   ")
+		-- Add padding: 3 spaces if we have two-char labels, 2 spaces otherwise
+		local padding = has_two_char and "   " or "  "
+		local filter_prompt = filter_title .. state.filter_input .. padding
+		table.insert(lines, filter_prompt)
+	end
+
+	for buffer_idx, buffer in ipairs(filtered_buffers) do
 		local line_content
 		local should_show_char = false
+
+		-- Check if this buffer is selected in filter mode
+		local is_filter_selected = state.filter_mode and buffer_idx == state.filter_selected_index
 
 		-- Determine if we should show characters based on config and state
 		if config.label and config.label.show == "always" then
@@ -742,7 +969,23 @@ local function render_buffers()
 			end
 
 			if show_label then
-				table.insert(parts, buffer.label)
+				-- Pad single-character labels with a space only if there are two-character labels
+				local label_display = (#buffer.label == 1 and has_two_char) and buffer.label .. " "
+					or buffer.label
+				-- In filter mode, show active indicator for selected item or spaces for others
+				if state.filter_mode then
+					if is_filter_selected then
+						-- Use configurable active indicator with padding to match label width
+						local filter_config = config.list and config.list.filter or {}
+						local indicator = filter_config.active_indicator or "•"
+						local padding_needed = #label_display - vim.fn.strwidth(indicator)
+						table.insert(parts, indicator .. string.rep(" ", math.max(0, padding_needed)))
+					else
+						table.insert(parts, string.rep(" ", #label_display))
+					end
+				else
+					table.insert(parts, label_display)
+				end
 			end
 
 			if show_space and #parts > 1 then
@@ -801,10 +1044,20 @@ local function render_buffers()
 	local ns_id = vim.api.nvim_create_namespace("BufferSticks")
 	vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, final_lines)
 
+	-- Highlight filter prompt if in filter mode
+	if state.filter_mode then
+		local filter_line_idx = config.padding.top
+		vim.hl.range(state.buf, ns_id, "BufferSticksFilterTitle", { filter_line_idx, 0 }, { filter_line_idx, -1 })
+	end
+
 	-- Set highlights
-	for i, buffer in ipairs(buffers) do
-		local line_idx = i - 1 + config.padding.top -- Account for top padding
-		local line_content = final_lines[i + config.padding.top] -- Access content from final padded lines
+	local line_offset = state.filter_mode and 1 or 0 -- Offset for filter prompt line
+	for i, buffer in ipairs(filtered_buffers) do
+		local line_idx = i - 1 + config.padding.top + line_offset -- Account for top padding and filter prompt
+		local line_content = final_lines[i + config.padding.top + line_offset] -- Access content from final padded lines
+
+		-- Check if this buffer is selected in filter mode
+		local is_filter_selected = state.filter_mode and i == state.filter_selected_index
 
 		-- In list mode, apply specific highlighting for different parts
 		if state.list_mode and config.list and config.list.show then
@@ -824,7 +1077,10 @@ local function render_buffers()
 			if show_stick then
 				local stick_char
 				local hl_group
-				if buffer.is_modified then
+				if is_filter_selected then
+					-- Use filter selected highlight
+					hl_group = "BufferSticksFilterSelected"
+				elseif buffer.is_modified then
 					if buffer.is_current then
 						stick_char = config.active_modified_char
 						hl_group = "BufferSticksActiveModified"
@@ -864,7 +1120,10 @@ local function render_buffers()
 				local filename = display_paths[buffer.id] or vim.fn.fnamemodify(buffer.name, ":t")
 				local filename_width = vim.fn.strwidth(filename)
 				local hl_group
-				if buffer.is_modified then
+				if is_filter_selected then
+					-- Use filter selected highlight
+					hl_group = "BufferSticksFilterSelected"
+				elseif buffer.is_modified then
 					if buffer.is_current then
 						hl_group = "BufferSticksActiveModified"
 					elseif buffer.is_alternate then
@@ -899,8 +1158,8 @@ local function render_buffers()
 				col_offset = col_offset + 1
 			end
 
-			-- Highlight label part with special label highlight
-			if show_label then
+			-- Highlight label part with special label highlight (skip in filter mode)
+			if show_label and not state.filter_mode then
 				-- Find the label in the line content to get exact byte positions
 				local content_start = line_content:sub(col_offset + 1) -- Content after right-align padding and previous elements
 				local label_start_pos = content_start:find(vim.pesc(buffer.label))
@@ -920,7 +1179,10 @@ local function render_buffers()
 		else
 			-- Normal mode: highlight entire line
 			local hl_group
-			if buffer.is_modified then
+			if is_filter_selected then
+				-- Use filter selected highlight
+				hl_group = "BufferSticksFilterSelected"
+			elseif buffer.is_modified then
 				if buffer.is_current then
 					hl_group = "BufferSticksActiveModified"
 				elseif buffer.is_alternate then
@@ -991,10 +1253,20 @@ function M.list(opts)
 	create_or_update_floating_window()
 	render_buffers()
 
+	-- Helper to update display with window resize and redraw
+	local function update_display()
+		create_or_update_floating_window()
+		render_buffers()
+		vim.cmd("redraw")
+	end
+
 	-- Helper to exit list mode
 	local function leave()
 		state.list_mode = false
 		state.list_input = ""
+		state.filter_mode = false
+		state.filter_input = ""
+		state.filter_selected_index = 1
 		create_or_update_floating_window() -- Resize back to normal mode
 		render_buffers()
 	end
@@ -1002,16 +1274,150 @@ function M.list(opts)
 	-- Start input loop
 	local function handle_input()
 		local char = vim.fn.getchar()
-		local char_str = type(char) == "number" and vim.fn.nr2char(char) or char
+		local char_str
 
-		-- Handle escape or ctrl-c to exit list mode
-		if char == 27 or char_str == "\x03" or char_str == "\27" then
-			leave()
+		if type(char) == "number" then
+			char_str = vim.fn.nr2char(char)
+		elseif type(char) == "string" then
+			char_str = char
+		else
+			char_str = ""
+		end
+
+		-- Handle escape or ctrl-c to exit list mode (or filter mode)
+		if char == 27 or (type(char_str) == "string" and (char_str == "\x03" or char_str == "\27")) then
+			if state.filter_mode then
+				-- Exit filter mode back to list mode
+				state.filter_mode = false
+				state.filter_input = ""
+				state.filter_selected_index = 1
+				update_display()
+				vim.schedule(handle_input)
+			else
+				-- Exit list mode entirely
+				leave()
+			end
+			return
+		end
+
+		-- If in filter mode, handle filter-specific input
+		if state.filter_mode then
+			local filter_keys = config.list and config.list.filter and config.list.filter.keys or {}
+
+			-- Handle up arrow (check for both escape sequence and Vim's key notation)
+			if
+				filter_keys.move_up == "<Up>"
+				and type(char_str) == "string"
+				and (char_str == "\x1b[A" or char_str == "<80>ku" or char_str:match("ku$"))
+			then
+				local buffers = get_buffer_list()
+				local display_paths = get_display_paths(buffers)
+				local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+				local num_results = #filtered_indices
+
+				if num_results > 0 then
+					state.filter_selected_index = state.filter_selected_index - 1
+					if state.filter_selected_index < 1 then
+						state.filter_selected_index = num_results
+					end
+					update_display()
+				end
+				vim.schedule(handle_input)
+				return
+			end
+
+			-- Handle down arrow (check for both escape sequence and Vim's key notation)
+			if
+				filter_keys.move_down == "<Down>"
+				and type(char_str) == "string"
+				and (char_str == "\x1b[B" or char_str == "<80>kd" or char_str:match("kd$"))
+			then
+				local buffers = get_buffer_list()
+				local display_paths = get_display_paths(buffers)
+				local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+				local num_results = #filtered_indices
+
+				if num_results > 0 then
+					state.filter_selected_index = state.filter_selected_index + 1
+					if state.filter_selected_index > num_results then
+						state.filter_selected_index = 1
+					end
+					update_display()
+				end
+				vim.schedule(handle_input)
+				return
+			end
+
+			-- Handle enter/confirm
+			if filter_keys.confirm == "<CR>" and (char == 13 or char == 10) then
+				local buffers = get_buffer_list()
+				local display_paths = get_display_paths(buffers)
+				local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+
+				if #filtered_indices > 0 then
+					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+					if selected_buffer then
+						if type(state.list_action) == "function" then
+							state.list_action(selected_buffer, leave)
+						elseif state.list_action == "open" then
+							vim.api.nvim_set_current_buf(selected_buffer.id)
+							leave()
+						elseif state.list_action == "close" then
+							vim.api.nvim_buf_delete(selected_buffer.id, { force = false })
+							leave()
+						end
+					end
+				end
+				return
+			end
+
+			-- Handle backspace (127, 8 for numeric, "<80>kb" or "�kb" for string representation)
+			if char == 127 or char == 8 or char_str == "<80>kb" or char_str:match("kb$") then
+				if #state.filter_input > 0 then
+					state.filter_input = state.filter_input:sub(1, -2)
+					state.filter_selected_index = 1
+					update_display()
+				end
+				vim.schedule(handle_input)
+				return
+			end
+
+			-- Handle regular character input in filter mode
+			if
+				type(char_str) == "string"
+				and #char_str > 0
+				and type(char) == "number"
+				and char >= 32
+				and char < 127
+			then
+				if char_str:match("[%w%s%p]") then
+					state.filter_input = state.filter_input .. char_str
+					state.filter_selected_index = 1
+					update_display()
+					vim.schedule(handle_input)
+					return
+				end
+			end
+
+			-- Invalid character in filter mode, ignore and continue
+			vim.schedule(handle_input)
+			return
+		end
+
+		-- Check if user wants to enter filter mode (must come before word character check)
+		local filter_keys = config.list and config.list.filter and config.list.filter.keys or {}
+		if filter_keys.enter == "/" and type(char_str) == "string" and char_str == "/" then
+			state.filter_mode = true
+			state.filter_input = ""
+			state.filter_selected_index = 1
+			update_display()
+			vim.schedule(handle_input)
 			return
 		end
 
 		-- Handle configured close buffer key (default ctrl-q)
-		local close_key = config.list and config.list.keys and config.list.keys.close_buffer or "<C-q>"
+		local list_keys = config.list and config.list.keys or {}
+		local close_key = list_keys.close_buffer or "<C-q>"
 		if close_key == "<C-q>" and char == 17 then -- ctrl-q
 			-- Always close the current active buffer
 			local current_buf = vim.api.nvim_get_current_buf()
@@ -1020,8 +1426,8 @@ function M.list(opts)
 			return
 		end
 
-		-- Handle regular character input
-		if char_str:match("%w") then
+		-- Handle regular character input (original list mode behavior)
+		if type(char_str) == "string" and #char_str > 0 and char_str:match("%w") then
 			state.list_input = state.list_input .. char_str:lower()
 
 			-- Find matching buffers
@@ -1181,6 +1587,32 @@ function M.setup(opts)
 					label_hl.bg = nil -- Remove background for transparency
 				end
 				vim.api.nvim_set_hl(0, "BufferSticksLabel", label_hl)
+			end
+		end
+
+		-- Set up filter_selected highlight
+		if config.highlights.filter_selected then
+			if config.highlights.filter_selected.link then
+				vim.api.nvim_set_hl(0, "BufferSticksFilterSelected", { link = config.highlights.filter_selected.link })
+			else
+				local filter_selected_hl = vim.deepcopy(config.highlights.filter_selected)
+				if is_transparent then
+					filter_selected_hl.bg = nil -- Remove background for transparency
+				end
+				vim.api.nvim_set_hl(0, "BufferSticksFilterSelected", filter_selected_hl)
+			end
+		end
+
+		-- Set up filter_title highlight
+		if config.highlights.filter_title then
+			if config.highlights.filter_title.link then
+				vim.api.nvim_set_hl(0, "BufferSticksFilterTitle", { link = config.highlights.filter_title.link })
+			else
+				local filter_title_hl = vim.deepcopy(config.highlights.filter_title)
+				if is_transparent then
+					filter_title_hl.bg = nil -- Remove background for transparency
+				end
+				vim.api.nvim_set_hl(0, "BufferSticksFilterTitle", filter_title_hl)
 			end
 		end
 

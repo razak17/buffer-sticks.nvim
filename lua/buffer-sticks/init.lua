@@ -970,7 +970,7 @@ local function render_buffers()
 
 			if show_label then
 				-- Pad single-character labels with a space only if there are two-character labels
-				local label_display = (#buffer.label == 1 and has_two_char) and buffer.label .. " "
+				local label_display = (#buffer.label == 1 and has_two_char) and " " .. buffer.label
 					or buffer.label
 				-- In filter mode, show active indicator for selected item or spaces for others
 				if state.filter_mode then

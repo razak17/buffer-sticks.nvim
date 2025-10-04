@@ -4,7 +4,8 @@ A neovim plugin that displays a vertical indicator showing open buffers and doub
 
 
 # Demo
-<!-- Demo source: https://github.com/ahkohd/buffer-sticks.nvim/raw/refs/heads/patch/demo/assets/demo.m4v -->
+<!-- Demo source: https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89  -->
+https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89
 
 ## Features
 

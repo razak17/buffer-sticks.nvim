@@ -3,7 +3,7 @@
 A neovim plugin that displays a vertical indicator showing open buffers and doubles as a customizable buffer picker.
 
 
-# Demo
+## Demo
 <!-- Demo source: https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89  -->
 https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89
 

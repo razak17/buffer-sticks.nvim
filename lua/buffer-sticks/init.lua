@@ -1158,22 +1158,45 @@ local function render_buffers()
 				col_offset = col_offset + 1
 			end
 
-			-- Highlight label part with special label highlight (skip in filter mode)
-			if show_label and not state.filter_mode then
-				-- Find the label in the line content to get exact byte positions
-				local content_start = line_content:sub(col_offset + 1) -- Content after right-align padding and previous elements
-				local label_start_pos = content_start:find(vim.pesc(buffer.label))
+			-- Highlight label part
+			if show_label then
+				if state.filter_mode then
+					-- In filter mode, highlight the indicator for selected item
+					if is_filter_selected then
+						local filter_config = config.list and config.list.filter or {}
+						local indicator = filter_config.active_indicator or "•"
+						-- Find the indicator in the line content
+						local content_start = line_content:sub(col_offset + 1)
+						local indicator_start_pos = content_start:find(vim.pesc(indicator))
+						if indicator_start_pos then
+							local byte_start = col_offset + indicator_start_pos - 1
+							local byte_end = byte_start + #indicator
+							vim.hl.range(
+								state.buf,
+								ns_id,
+								"BufferSticksFilterSelected",
+								{ line_idx, byte_start },
+								{ line_idx, byte_end }
+							)
+						end
+					end
+				else
+					-- Not in filter mode, use normal label highlight
+					-- Find the label in the line content to get exact byte positions
+					local content_start = line_content:sub(col_offset + 1) -- Content after right-align padding and previous elements
+					local label_start_pos = content_start:find(vim.pesc(buffer.label))
 
-				if label_start_pos then
-					local byte_start = col_offset + label_start_pos - 1 -- Convert to absolute byte position
-					local byte_end = byte_start + #buffer.label -- Byte length, not display width
-					vim.hl.range(
-						state.buf,
-						ns_id,
-						"BufferSticksLabel",
-						{ line_idx, byte_start },
-						{ line_idx, byte_end }
-					)
+					if label_start_pos then
+						local byte_start = col_offset + label_start_pos - 1 -- Convert to absolute byte position
+						local byte_end = byte_start + #buffer.label -- Byte length, not display width
+						vim.hl.range(
+							state.buf,
+							ns_id,
+							"BufferSticksLabel",
+							{ line_idx, byte_start },
+							{ line_idx, byte_end }
+						)
+					end
 				end
 			end
 		else

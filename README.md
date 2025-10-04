@@ -2,11 +2,9 @@
 
 A neovim plugin that displays a vertical indicator showing open buffers and doubles as a customizable buffer picker.
 
-![Demo](assets/demo.png)
 
-Jump mode for quick buffer navigation:
-
-![Jump Demo](assets/jump-demo.png)
+# Demo
+<!-- Demo source: https://github.com/ahkohd/buffer-sticks.nvim/raw/refs/heads/patch/demo/assets/demo.m4v -->
 
 ## Features
 

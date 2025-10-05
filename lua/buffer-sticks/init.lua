@@ -7,7 +7,7 @@
 ---@field hide function Hide the buffer sticks
 local M = {}
 
--- Fuzzy matching helpers (extracted from mini.fuzzy) =======================
+-- Fuzzy matching helpers (extracted from mini.fuzzy)
 local function string_to_letters(s)
 	return vim.tbl_map(vim.pesc, vim.split(s, ""))
 end
@@ -116,7 +116,7 @@ local function fuzzy_filtersort(word, candidate_array, cutoff)
 	return filter_by_indexes(candidate_array, filter_ids)
 end
 
--- End fuzzy matching helpers ===============================================
+-- End fuzzy matching helpers
 
 ---@class BufferSticksState
 ---@field wins table<integer, integer> Map of tabpage to window handle

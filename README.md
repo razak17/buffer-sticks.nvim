@@ -1,11 +1,17 @@
+<div align="center">
+	
 # buffer-sticks.nvim
 
 A neovim plugin that displays a vertical indicator showing open buffers and doubles as a customizable buffer picker.
 
+[![Neovim](https://img.shields.io/badge/Neovim%200.10+-green.svg?style=for-the-badge&logo=neovim)](https://neovim.io)
+[![Lua](https://img.shields.io/badge/Lua-blue.svg?style=for-the-badge&logo=lua)](http://www.lua.org)
 
-## Demo
+
 <!-- Demo source: https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89  -->
 https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89
+
+</div>
 
 ## Features
 

@@ -392,7 +392,7 @@ local function get_buffer_list()
 
 	-- Collect filtered buffers
 	for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-		if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].buflisted then
+		if vim.bo[buf].buflisted then
 			local buf_name = vim.api.nvim_buf_get_name(buf)
 			local buf_filetype = vim.bo[buf].filetype
 			local should_include = true

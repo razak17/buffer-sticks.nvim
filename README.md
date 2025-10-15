@@ -1,4 +1,5 @@
 <div align="center">
+
 # buffer-sticks.nvim
 
 A neovim plugin that displays a vertical indicator showing open buffers and doubles as a customizable buffer picker.

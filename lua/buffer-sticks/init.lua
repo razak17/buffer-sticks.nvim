@@ -127,6 +127,8 @@ end
 ---@field list_mode boolean Whether list mode is active
 ---@field list_input string Current input in list mode
 ---@field list_action string Current action in list mode ("open" or "close")
+---@field list_mode_selected_index integer|nil Currently selected buffer index in list mode (non-filter)
+---@field last_selected_buffer_id integer|nil Last selected buffer ID (persists across sessions)
 ---@field filter_mode boolean Whether filter mode is active
 ---@field filter_input string Current filter input string
 ---@field filter_selected_index integer Currently selected buffer index in filtered results
@@ -137,6 +139,8 @@ local state = {
 	list_mode = false,
 	list_input = "",
 	list_action = "open",
+	list_mode_selected_index = nil,
+	last_selected_buffer_id = nil,
 	filter_mode = false,
 	filter_input = "",
 	filter_selected_index = 1,
@@ -144,6 +148,10 @@ local state = {
 	cached_labels = {},
 	auto_hidden = false,
 	win_pos = { col = 0, row = 0, width = 0, height = 0 },
+	preview_origin_win = nil,
+	preview_origin_buf = nil,
+	preview_float_win = nil,
+	preview_float_buf = nil,
 }
 
 ---@alias BufferSticksHighlights vim.api.keyset.highlight
@@ -160,6 +168,8 @@ local state = {
 
 ---@class BufferSticksListKeys
 ---@field close_buffer string Key combination to close buffer in list mode
+---@field move_up string Key to move selection up in list mode
+---@field move_down string Key to move selection down in list mode
 
 ---@class BufferSticksFilterKeys
 ---@field enter string Key to enter filter mode
@@ -177,6 +187,7 @@ local state = {
 
 ---@class BufferSticksList
 ---@field show string[] What to show in list mode: "filename", "space", "label", "stick"
+---@field active_indicator string Symbol to show for the selected item when using arrow navigation
 ---@field keys BufferSticksListKeys Key mappings for list mode
 ---@field filter BufferSticksListFilter Filter configuration
 
@@ -218,8 +229,11 @@ local config = {
 	label = { show = "list" },
 	list = {
 		show = { "filename", "space", "label" },
+		active_indicator = "•",
 		keys = {
 			close_buffer = "<C-q>",
+			move_up = "<Up>",
+			move_down = "<Down>",
 		},
 		filter = {
 			title = "➜ ",
@@ -235,6 +249,20 @@ local config = {
 			},
 		},
 	},
+	preview = {
+		enabled = true,
+		mode = "float",
+		float = {
+			position = "right",
+			width = 0.5,
+			height = 0.8,
+			border = "single",
+			title = nil,
+			title_pos = "center",
+			footer = nil,
+			footer_pos = "center",
+		},
+	},
 	highlights = {
 		active = { fg = "#bbbbbb" },
 		alternate = { fg = "#888888" },
@@ -245,6 +273,7 @@ local config = {
 		label = { fg = "#aaaaaa", italic = true },
 		filter_selected = { fg = "#bbbbbb", italic = true },
 		filter_title = { fg = "#aaaaaa", italic = true },
+		list_selected = { fg = "#bbbbbb", italic = true },
 	},
 }
 
@@ -925,6 +954,8 @@ local function render_buffers()
 
 		-- Check if this buffer is selected in filter mode
 		local is_filter_selected = state.filter_mode and buffer_idx == state.filter_selected_index
+		-- Check if this buffer is selected in list mode (non-filter)
+		local is_list_selected = state.list_mode and not state.filter_mode and buffer_idx == state.list_mode_selected_index
 
 		-- Determine if we should show characters based on config and state
 		if config.label and config.label.show == "always" then
@@ -983,6 +1014,12 @@ local function render_buffers()
 					else
 						table.insert(parts, string.rep(" ", #label_display))
 					end
+				elseif is_list_selected then
+					-- In list mode with selection, show active indicator with leading space if two-char labels exist
+					local list_config = config.list or {}
+					local indicator = list_config.active_indicator or "•"
+					local indicator_display = has_two_char and " " .. indicator or indicator
+					table.insert(parts, indicator_display)
 				else
 					table.insert(parts, label_display)
 				end
@@ -1058,6 +1095,8 @@ local function render_buffers()
 
 		-- Check if this buffer is selected in filter mode
 		local is_filter_selected = state.filter_mode and i == state.filter_selected_index
+		-- Check if this buffer is selected in list mode (non-filter)
+		local is_list_selected = state.list_mode and not state.filter_mode and i == state.list_mode_selected_index
 
 		-- In list mode, apply specific highlighting for different parts
 		if state.list_mode and config.list and config.list.show then
@@ -1077,10 +1116,9 @@ local function render_buffers()
 			if show_stick then
 				local stick_char
 				local hl_group
-				if is_filter_selected then
-					-- Use filter selected highlight
-					hl_group = "BufferSticksFilterSelected"
-				elseif buffer.is_modified then
+
+				-- Determine stick character based on buffer state
+				if buffer.is_modified then
 					if buffer.is_current then
 						stick_char = config.active_modified_char
 						hl_group = "BufferSticksActiveModified"
@@ -1103,6 +1141,13 @@ local function render_buffers()
 						hl_group = "BufferSticksInactive"
 					end
 				end
+
+				-- Override highlight if selected
+				if is_filter_selected then
+					hl_group = "BufferSticksFilterSelected"
+				elseif is_list_selected then
+					hl_group = "BufferSticksListSelected"
+				end
 				local stick_width = vim.fn.strwidth(stick_char)
 				vim.hl.range(
 					state.buf,
@@ -1123,6 +1168,9 @@ local function render_buffers()
 				if is_filter_selected then
 					-- Use filter selected highlight
 					hl_group = "BufferSticksFilterSelected"
+				elseif is_list_selected then
+					-- Use list mode selected highlight
+					hl_group = "BufferSticksListSelected"
 				elseif buffer.is_modified then
 					if buffer.is_current then
 						hl_group = "BufferSticksActiveModified"
@@ -1180,15 +1228,31 @@ local function render_buffers()
 							)
 						end
 					end
+				elseif is_list_selected then
+					-- In list mode with selection, highlight the indicator
+					local list_config = config.list or {}
+					local indicator = list_config.active_indicator or "•"
+					local content_start = line_content:sub(col_offset + 1)
+					local indicator_start_pos = content_start:find(vim.pesc(indicator))
+					if indicator_start_pos then
+						local byte_start = col_offset + indicator_start_pos - 1
+						local byte_end = byte_start + #indicator
+						vim.hl.range(
+							state.buf,
+							ns_id,
+							"BufferSticksListSelected",
+							{ line_idx, byte_start },
+							{ line_idx, byte_end }
+						)
+					end
 				else
-					-- Not in filter mode, use normal label highlight
-					-- Find the label in the line content to get exact byte positions
-					local content_start = line_content:sub(col_offset + 1) -- Content after right-align padding and previous elements
+					-- Not in filter or selection mode, use normal label highlight
+					local content_start = line_content:sub(col_offset + 1)
 					local label_start_pos = content_start:find(vim.pesc(buffer.label))
 
 					if label_start_pos then
-						local byte_start = col_offset + label_start_pos - 1 -- Convert to absolute byte position
-						local byte_end = byte_start + #buffer.label -- Byte length, not display width
+						local byte_start = col_offset + label_start_pos - 1
+						local byte_end = byte_start + #buffer.label
 						vim.hl.range(
 							state.buf,
 							ns_id,
@@ -1205,6 +1269,9 @@ local function render_buffers()
 			if is_filter_selected then
 				-- Use filter selected highlight
 				hl_group = "BufferSticksFilterSelected"
+			elseif is_list_selected then
+				-- Use list mode selected highlight
+				hl_group = "BufferSticksListSelected"
 			elseif buffer.is_modified then
 				if buffer.is_current then
 					hl_group = "BufferSticksActiveModified"
@@ -1223,6 +1290,112 @@ local function render_buffers()
 				end
 			end
 			vim.hl.range(state.buf, ns_id, hl_group, { line_idx, 0 }, { line_idx, -1 })
+		end
+	end
+end
+
+---Create or update the preview floating window
+---@param buffer_id integer Buffer ID to preview
+local function create_preview_float(buffer_id)
+	if not vim.api.nvim_buf_is_valid(buffer_id) then
+		return
+	end
+
+	local preview_config = config.preview and config.preview.float or {}
+	local position = preview_config.position or "right"
+	local width_frac = preview_config.width or 0.5
+	local height_frac = preview_config.height or 0.8
+
+	local editor_width = vim.o.columns
+	local editor_height = vim.o.lines
+
+	local width = math.floor(editor_width * width_frac)
+	local height = math.floor(editor_height * height_frac)
+
+	local col, row
+	if position == "left" then
+		col = 0
+		row = math.floor((editor_height - height) / 2)
+	elseif position == "below" then
+		col = math.floor((editor_width - width) / 2)
+		row = editor_height - height
+	else
+		col = editor_width - width - (state.win_pos.width or 0) - 2
+		row = math.floor((editor_height - height) / 2)
+	end
+
+	local win_config = {
+		relative = "editor",
+		width = width,
+		height = height,
+		col = col,
+		row = row,
+		style = "minimal",
+		border = preview_config.border or "single",
+		focusable = false,
+		zindex = 9,
+	}
+
+	if preview_config.title then
+		win_config.title = preview_config.title
+		win_config.title_pos = preview_config.title_pos or "center"
+	end
+
+	if preview_config.footer then
+		win_config.footer = preview_config.footer
+		win_config.footer_pos = preview_config.footer_pos or "center"
+	end
+
+	if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
+		vim.api.nvim_win_set_config(state.preview_float_win, win_config)
+		pcall(vim.api.nvim_win_set_buf, state.preview_float_win, buffer_id)
+	else
+		state.preview_float_win = vim.api.nvim_open_win(buffer_id, false, win_config)
+	end
+end
+
+---Clean up preview resources
+---@param restore_original? boolean Whether to restore original buffer in "current" mode
+local function cleanup_preview(restore_original)
+	if restore_original and config.preview and config.preview.mode == "current" then
+		if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
+			pcall(vim.api.nvim_set_current_buf, state.preview_origin_buf)
+		end
+	end
+
+	if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
+		pcall(vim.api.nvim_win_close, state.preview_float_win, true)
+	end
+	state.preview_float_win = nil
+	state.preview_float_buf = nil
+	state.preview_origin_win = nil
+	state.preview_origin_buf = nil
+end
+
+---Update preview based on selected buffer
+---@param buffer_id integer Buffer ID to preview
+local function update_preview(buffer_id)
+	if not config.preview or not config.preview.enabled then
+		return
+	end
+
+	if not buffer_id or not vim.api.nvim_buf_is_valid(buffer_id) then
+		return
+	end
+
+	local mode = config.preview.mode
+
+	if mode == "float" then
+		create_preview_float(buffer_id)
+	elseif mode == "current" then
+		pcall(vim.api.nvim_set_current_buf, buffer_id)
+	elseif mode == "last_window" then
+		if state.preview_origin_win and vim.api.nvim_win_is_valid(state.preview_origin_win) then
+			local current_win = vim.api.nvim_get_current_win()
+			pcall(vim.api.nvim_win_set_buf, state.preview_origin_win, buffer_id)
+			if current_win ~= state.preview_origin_win then
+				pcall(vim.api.nvim_set_current_win, current_win)
+			end
 		end
 	end
 end
@@ -1271,10 +1444,28 @@ function M.list(opts)
 	state.list_mode = true
 	state.list_input = ""
 	state.list_action = action
+	state.list_mode_selected_index = nil
+	state.preview_origin_win = vim.api.nvim_get_current_win()
+	state.preview_origin_buf = vim.api.nvim_get_current_buf()
+
+	-- Always start at the currently active buffer
+	local current_buf = vim.api.nvim_get_current_buf()
+	local buffers = get_buffer_list()
+	for idx, buffer in ipairs(buffers) do
+		if buffer.id == current_buf then
+			state.list_mode_selected_index = idx
+			state.last_selected_buffer_id = current_buf
+			break
+		end
+	end
 
 	-- Refresh display to show characters (resize window for list mode content)
 	create_or_update_floating_window()
 	render_buffers()
+
+	if state.list_mode_selected_index then
+		update_preview(buffers[state.list_mode_selected_index].id)
+	end
 
 	-- Helper to update display with window resize and redraw
 	local function update_display()
@@ -1284,12 +1475,15 @@ function M.list(opts)
 	end
 
 	-- Helper to exit list mode
-	local function leave()
+	---@param restore_original? boolean Whether to restore original buffer (true when canceling, false when confirming)
+	local function leave(restore_original)
 		state.list_mode = false
 		state.list_input = ""
+		state.list_mode_selected_index = nil
 		state.filter_mode = false
 		state.filter_input = ""
 		state.filter_selected_index = 1
+		cleanup_preview(restore_original)
 		create_or_update_floating_window() -- Resize back to normal mode
 		render_buffers()
 	end
@@ -1310,15 +1504,39 @@ function M.list(opts)
 		-- Handle escape or ctrl-c to exit list mode (or filter mode)
 		if char == 27 or (type(char_str) == "string" and (char_str == "\x03" or char_str == "\27")) then
 			if state.filter_mode then
-				-- Exit filter mode back to list mode
+				-- Exit filter mode back to list mode (preserve list mode selection)
 				state.filter_mode = false
 				state.filter_input = ""
 				state.filter_selected_index = 1
 				update_display()
 				vim.schedule(handle_input)
+			elseif state.list_mode_selected_index ~= nil then
+				-- Clear list mode selection (first ESC) - cleanup preview
+				if config.preview and config.preview.enabled then
+					if config.preview.mode == "current" then
+						if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
+							pcall(vim.api.nvim_set_current_buf, state.preview_origin_buf)
+						end
+					elseif config.preview.mode == "float" then
+						if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
+							pcall(vim.api.nvim_win_close, state.preview_float_win, true)
+						end
+						state.preview_float_win = nil
+					elseif config.preview.mode == "last_window" then
+						if state.preview_origin_win and vim.api.nvim_win_is_valid(state.preview_origin_win) then
+							if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
+								pcall(vim.api.nvim_win_set_buf, state.preview_origin_win, state.preview_origin_buf)
+							end
+						end
+					end
+				end
+				state.list_mode_selected_index = nil
+				state.last_selected_buffer_id = nil
+				update_display()
+				vim.schedule(handle_input)
 			else
-				-- Exit list mode entirely
-				leave()
+				-- Exit list mode entirely (second ESC)
+				leave(true)
 			end
 			return
 		end
@@ -1343,6 +1561,10 @@ function M.list(opts)
 					if state.filter_selected_index < 1 then
 						state.filter_selected_index = num_results
 					end
+					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+					if selected_buffer then
+						update_preview(selected_buffer.id)
+					end
 					update_display()
 				end
 				vim.schedule(handle_input)
@@ -1365,6 +1587,10 @@ function M.list(opts)
 					if state.filter_selected_index > num_results then
 						state.filter_selected_index = 1
 					end
+					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+					if selected_buffer then
+						update_preview(selected_buffer.id)
+					end
 					update_display()
 				end
 				vim.schedule(handle_input)
@@ -1381,13 +1607,13 @@ function M.list(opts)
 					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
 					if selected_buffer then
 						if type(state.list_action) == "function" then
-							state.list_action(selected_buffer, leave)
+							state.list_action(selected_buffer, function() leave(false) end)
 						elseif state.list_action == "open" then
 							vim.api.nvim_set_current_buf(selected_buffer.id)
-							leave()
+							leave(false)
 						elseif state.list_action == "close" then
 							vim.api.nvim_buf_delete(selected_buffer.id, { force = false })
-							leave()
+							leave(false)
 						end
 					end
 				end
@@ -1399,6 +1625,15 @@ function M.list(opts)
 				if #state.filter_input > 0 then
 					state.filter_input = state.filter_input:sub(1, -2)
 					state.filter_selected_index = 1
+					local buffers = get_buffer_list()
+					local display_paths = get_display_paths(buffers)
+					local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+					if #filtered_indices > 0 then
+						local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+						if selected_buffer then
+							update_preview(selected_buffer.id)
+						end
+					end
 					update_display()
 				end
 				vim.schedule(handle_input)
@@ -1416,6 +1651,15 @@ function M.list(opts)
 				if char_str:match("[%w%s%p]") then
 					state.filter_input = state.filter_input .. char_str
 					state.filter_selected_index = 1
+					local buffers = get_buffer_list()
+					local display_paths = get_display_paths(buffers)
+					local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+					if #filtered_indices > 0 then
+						local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+						if selected_buffer then
+							update_preview(selected_buffer.id)
+						end
+					end
 					update_display()
 					vim.schedule(handle_input)
 					return
@@ -1427,12 +1671,101 @@ function M.list(opts)
 			return
 		end
 
+		-- Handle arrow keys in list mode (non-filter) - check configured keys
+		local list_keys = config.list and config.list.keys or {}
+
+		-- Up arrow - only if configured as <Up>
+		if
+			list_keys.move_up == "<Up>"
+			and type(char_str) == "string"
+			and (char_str == "\x1b[A" or char_str == "<80>ku" or char_str:match("ku$"))
+		then
+			local buffers = get_buffer_list()
+			if #buffers > 0 then
+				if state.list_mode_selected_index == nil then
+					-- Find current buffer index
+					local current_buf = vim.api.nvim_get_current_buf()
+					for idx, buffer in ipairs(buffers) do
+						if buffer.id == current_buf then
+							state.list_mode_selected_index = idx
+							break
+						end
+					end
+					if state.list_mode_selected_index == nil then
+						state.list_mode_selected_index = #buffers
+					end
+				end
+				-- Move selection up
+				state.list_mode_selected_index = state.list_mode_selected_index == 1 and #buffers
+					or state.list_mode_selected_index - 1
+				-- Store selected buffer ID for persistence
+				state.last_selected_buffer_id = buffers[state.list_mode_selected_index].id
+				update_preview(buffers[state.list_mode_selected_index].id)
+				update_display()
+			end
+			vim.schedule(handle_input)
+			return
+		end
+
+		-- Down arrow - only if configured as <Down>
+		if
+			list_keys.move_down == "<Down>"
+			and type(char_str) == "string"
+			and (char_str == "\x1b[B" or char_str == "<80>kd" or char_str:match("kd$"))
+		then
+			local buffers = get_buffer_list()
+			if #buffers > 0 then
+				if state.list_mode_selected_index == nil then
+					-- Find current buffer index
+					local current_buf = vim.api.nvim_get_current_buf()
+					for idx, buffer in ipairs(buffers) do
+						if buffer.id == current_buf then
+							state.list_mode_selected_index = idx
+							break
+						end
+					end
+					if state.list_mode_selected_index == nil then
+						state.list_mode_selected_index = 1
+					end
+				end
+				-- Move selection down
+				state.list_mode_selected_index = (state.list_mode_selected_index % #buffers) + 1
+				-- Store selected buffer ID for persistence
+				state.last_selected_buffer_id = buffers[state.list_mode_selected_index].id
+				update_preview(buffers[state.list_mode_selected_index].id)
+				update_display()
+			end
+			vim.schedule(handle_input)
+			return
+		end
+
+		-- Enter key to confirm selection - only when selection is active
+		if (char == 13 or char == 10) and state.list_mode_selected_index ~= nil then
+			local buffers = get_buffer_list()
+			if state.list_mode_selected_index > 0 and state.list_mode_selected_index <= #buffers then
+				local selected_buffer = buffers[state.list_mode_selected_index]
+				if selected_buffer then
+					if type(state.list_action) == "function" then
+						state.list_action(selected_buffer, function() leave(false) end)
+					elseif state.list_action == "open" then
+						vim.api.nvim_set_current_buf(selected_buffer.id)
+						leave(false)
+					elseif state.list_action == "close" then
+						vim.api.nvim_buf_delete(selected_buffer.id, { force = false })
+						leave(false)
+					end
+				end
+			end
+			return
+		end
+
 		-- Check if user wants to enter filter mode (must come before word character check)
 		local filter_keys = config.list and config.list.filter and config.list.filter.keys or {}
 		if filter_keys.enter == "/" and type(char_str) == "string" and char_str == "/" then
 			state.filter_mode = true
 			state.filter_input = ""
 			state.filter_selected_index = 1
+			-- Preserve list_mode_selected_index so it can be restored when exiting filter mode
 			update_display()
 			vim.schedule(handle_input)
 			return
@@ -1445,12 +1778,14 @@ function M.list(opts)
 			-- Always close the current active buffer
 			local current_buf = vim.api.nvim_get_current_buf()
 			vim.api.nvim_buf_delete(current_buf, { force = false })
-			leave()
+			leave(false)
 			return
 		end
 
 		-- Handle regular character input (original list mode behavior)
 		if type(char_str) == "string" and #char_str > 0 and char_str:match("%w") then
+			-- Clear selection when typing label characters
+			state.list_mode_selected_index = nil
 			state.list_input = state.list_input .. char_str:lower()
 
 			-- Find matching buffers
@@ -1468,18 +1803,18 @@ function M.list(opts)
 			if #matches == 1 then
 				if type(state.list_action) == "function" then
 					-- Custom function action
-					state.list_action(matches[1], leave)
+					state.list_action(matches[1], function() leave(false) end)
 				elseif state.list_action == "open" then
 					vim.api.nvim_set_current_buf(matches[1].id)
-					leave()
+					leave(false)
 				elseif state.list_action == "close" then
 					vim.api.nvim_buf_delete(matches[1].id, { force = false })
-					leave()
+					leave(false)
 				end
 				return
 			elseif #matches == 0 then
 				-- No matches, exit list mode
-				leave()
+				leave(true)
 				return
 			end
 
@@ -1488,7 +1823,7 @@ function M.list(opts)
 			vim.schedule(handle_input)
 		else
 			-- Invalid character, exit list mode
-			leave()
+			leave(true)
 		end
 	end
 
@@ -1639,6 +1974,19 @@ function M.setup(opts)
 			end
 		end
 
+		-- Set up list_selected highlight
+		if config.highlights.list_selected then
+			if config.highlights.list_selected.link then
+				vim.api.nvim_set_hl(0, "BufferSticksListSelected", { link = config.highlights.list_selected.link })
+			else
+				local list_selected_hl = vim.deepcopy(config.highlights.list_selected)
+				if is_transparent then
+					list_selected_hl.bg = nil -- Remove background for transparency
+				end
+				vim.api.nvim_set_hl(0, "BufferSticksListSelected", list_selected_hl)
+			end
+		end
+
 		-- Set up background highlight for non-transparent mode
 		if not is_transparent then
 			vim.api.nvim_set_hl(0, "BufferSticksBackground", { bg = "#1e1e1e" })
@@ -1652,10 +2000,15 @@ function M.setup(opts)
 	local augroup = vim.api.nvim_create_augroup("BufferSticks", { clear = true })
 	vim.api.nvim_create_autocmd({ "BufEnter", "BufDelete", "BufWipeout" }, {
 		group = augroup,
-		callback = function()
+		callback = function(args)
 			-- Invalidate label cache when buffer list changes
 			state.cached_buffer_ids = {}
 			state.cached_labels = {}
+
+			-- Clear last selected buffer if it was deleted
+			if (args.event == "BufDelete" or args.event == "BufWipeout") and state.last_selected_buffer_id == args.buf then
+				state.last_selected_buffer_id = nil
+			end
 
 			if state.visible then
 				M.show() -- Refresh the display

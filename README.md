@@ -19,6 +19,7 @@ https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89
 - Highlights for active, alternate, inactive, and modified buffers
 - List mode for quick buffer navigation or closing by typing characters
 - Filter mode with fuzzy search for finding buffers quickly
+- Buffer preview while navigating with configurable display modes
 - Custom action functions for building buffer pickers
 - Configurable positioning and appearance
 - Transparent background support
@@ -140,7 +141,21 @@ require("buffer-sticks").setup({
         move_down = "<Down>",       -- Key to move selection down
       },
     },
-  }
+  },
+  preview = {
+    enabled = true,                    -- Enable buffer preview during navigation
+    mode = "float",                    -- Preview mode: "float", "current", or "last_window"
+    float = {
+      position = "right",              -- Float position: "right", "left", or "below"
+      width = 0.5,                     -- Width as fraction of screen (0.0 to 1.0)
+      height = 0.8,                    -- Height as fraction of screen (0.0 to 1.0)
+      border = "single",               -- Border style: "none", "single", "double", "rounded", "solid", "shadow"
+      title = nil,                     -- Window title (string or nil)
+      title_pos = "center",            -- Title position: "left", "center", "right"
+      footer = nil,                    -- Window footer (string or nil)
+      footer_pos = "center",           -- Footer position: "left", "center", "right"
+    },
+  },
   -- winblend = 100,                    -- Window blend level (0-100, 0=opaque, 100=fully blended)
   -- filter = {
   --   filetypes = { "help", "qf" },    -- Exclude by filetype (also: "NvimTree", "neo-tree", "Trouble")
@@ -250,6 +265,46 @@ List mode allows you to quickly navigate to or close buffers by typing their fir
 - `"space"` - Spaces between elements
 - `"label"` - Unique character
 - `"stick"` - Active/inactive character
+
+## Preview
+
+Buffer preview shows the content of the selected buffer while navigating in list or filter mode. Preview updates automatically as you move through buffers with arrow keys or type to filter.
+
+**Preview Modes:**
+
+- **`"float"`** - Displays buffer in a separate floating window
+  - Configurable position: `"right"`, `"left"`, or `"below"`
+  - Configurable size as fraction of screen
+  - Customizable border, title, and footer
+  - Default: right side, 50% width, 80% height, single border
+
+- **`"current"`** - Switches buffer in the current window
+  - Shows immediate preview as you navigate
+  - Press `Esc` to restore original buffer (cancel)
+  - Press `Enter` or type label to confirm selection
+
+- **`"last_window"`** - Previews in the window that was focused before entering list mode
+  - Useful when you activate list mode from a split
+  - Preview appears in your previous window while you navigate
+
+**Configuration:**
+
+```lua
+preview = {
+  enabled = true,        -- Enable/disable preview
+  mode = "float",        -- "float", "current", or "last_window"
+  float = {
+    position = "right",  -- "right", "left", or "below"
+    width = 0.5,         -- 0.0 to 1.0 (fraction of screen)
+    height = 0.8,        -- 0.0 to 1.0 (fraction of screen)
+    border = "rounded",  -- "none", "single", "double", "rounded", "solid", "shadow"
+    title = "Preview",   -- Window title (optional)
+    title_pos = "center", -- "left", "center", "right"
+    footer = nil,        -- Window footer (optional)
+    footer_pos = "center", -- "left", "center", "right"
+  },
+}
+```
 
 ### Highlight Options
 

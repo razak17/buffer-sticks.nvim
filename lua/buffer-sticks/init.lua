@@ -148,6 +148,10 @@ local state = {
 	cached_labels = {},
 	auto_hidden = false,
 	win_pos = { col = 0, row = 0, width = 0, height = 0 },
+	preview_origin_win = nil,
+	preview_origin_buf = nil,
+	preview_float_win = nil,
+	preview_float_buf = nil,
 }
 
 ---@alias BufferSticksHighlights vim.api.keyset.highlight
@@ -243,6 +247,20 @@ local config = {
 				move_up = "<Up>",
 				move_down = "<Down>",
 			},
+		},
+	},
+	preview = {
+		enabled = true,
+		mode = "float",
+		float = {
+			position = "right",
+			width = 0.5,
+			height = 0.8,
+			border = "single",
+			title = nil,
+			title_pos = "center",
+			footer = nil,
+			footer_pos = "center",
 		},
 	},
 	highlights = {
@@ -1276,6 +1294,112 @@ local function render_buffers()
 	end
 end
 
+---Create or update the preview floating window
+---@param buffer_id integer Buffer ID to preview
+local function create_preview_float(buffer_id)
+	if not vim.api.nvim_buf_is_valid(buffer_id) then
+		return
+	end
+
+	local preview_config = config.preview and config.preview.float or {}
+	local position = preview_config.position or "right"
+	local width_frac = preview_config.width or 0.5
+	local height_frac = preview_config.height or 0.8
+
+	local editor_width = vim.o.columns
+	local editor_height = vim.o.lines
+
+	local width = math.floor(editor_width * width_frac)
+	local height = math.floor(editor_height * height_frac)
+
+	local col, row
+	if position == "left" then
+		col = 0
+		row = math.floor((editor_height - height) / 2)
+	elseif position == "below" then
+		col = math.floor((editor_width - width) / 2)
+		row = editor_height - height
+	else
+		col = editor_width - width - (state.win_pos.width or 0) - 2
+		row = math.floor((editor_height - height) / 2)
+	end
+
+	local win_config = {
+		relative = "editor",
+		width = width,
+		height = height,
+		col = col,
+		row = row,
+		style = "minimal",
+		border = preview_config.border or "single",
+		focusable = false,
+		zindex = 9,
+	}
+
+	if preview_config.title then
+		win_config.title = preview_config.title
+		win_config.title_pos = preview_config.title_pos or "center"
+	end
+
+	if preview_config.footer then
+		win_config.footer = preview_config.footer
+		win_config.footer_pos = preview_config.footer_pos or "center"
+	end
+
+	if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
+		vim.api.nvim_win_set_config(state.preview_float_win, win_config)
+		pcall(vim.api.nvim_win_set_buf, state.preview_float_win, buffer_id)
+	else
+		state.preview_float_win = vim.api.nvim_open_win(buffer_id, false, win_config)
+	end
+end
+
+---Clean up preview resources
+---@param restore_original? boolean Whether to restore original buffer in "current" mode
+local function cleanup_preview(restore_original)
+	if restore_original and config.preview and config.preview.mode == "current" then
+		if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
+			pcall(vim.api.nvim_set_current_buf, state.preview_origin_buf)
+		end
+	end
+
+	if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
+		pcall(vim.api.nvim_win_close, state.preview_float_win, true)
+	end
+	state.preview_float_win = nil
+	state.preview_float_buf = nil
+	state.preview_origin_win = nil
+	state.preview_origin_buf = nil
+end
+
+---Update preview based on selected buffer
+---@param buffer_id integer Buffer ID to preview
+local function update_preview(buffer_id)
+	if not config.preview or not config.preview.enabled then
+		return
+	end
+
+	if not buffer_id or not vim.api.nvim_buf_is_valid(buffer_id) then
+		return
+	end
+
+	local mode = config.preview.mode
+
+	if mode == "float" then
+		create_preview_float(buffer_id)
+	elseif mode == "current" then
+		pcall(vim.api.nvim_set_current_buf, buffer_id)
+	elseif mode == "last_window" then
+		if state.preview_origin_win and vim.api.nvim_win_is_valid(state.preview_origin_win) then
+			local current_win = vim.api.nvim_get_current_win()
+			pcall(vim.api.nvim_win_set_buf, state.preview_origin_win, buffer_id)
+			if current_win ~= state.preview_origin_win then
+				pcall(vim.api.nvim_set_current_win, current_win)
+			end
+		end
+	end
+end
+
 ---Show the buffer sticks floating window
 ---Creates the window and renders the current buffer state
 function M.show()
@@ -1321,6 +1445,8 @@ function M.list(opts)
 	state.list_input = ""
 	state.list_action = action
 	state.list_mode_selected_index = nil
+	state.preview_origin_win = vim.api.nvim_get_current_win()
+	state.preview_origin_buf = vim.api.nvim_get_current_buf()
 
 	-- Always start at the currently active buffer
 	local current_buf = vim.api.nvim_get_current_buf()
@@ -1337,6 +1463,10 @@ function M.list(opts)
 	create_or_update_floating_window()
 	render_buffers()
 
+	if state.list_mode_selected_index then
+		update_preview(buffers[state.list_mode_selected_index].id)
+	end
+
 	-- Helper to update display with window resize and redraw
 	local function update_display()
 		create_or_update_floating_window()
@@ -1345,13 +1475,15 @@ function M.list(opts)
 	end
 
 	-- Helper to exit list mode
-	local function leave()
+	---@param restore_original? boolean Whether to restore original buffer (true when canceling, false when confirming)
+	local function leave(restore_original)
 		state.list_mode = false
 		state.list_input = ""
 		state.list_mode_selected_index = nil
 		state.filter_mode = false
 		state.filter_input = ""
 		state.filter_selected_index = 1
+		cleanup_preview(restore_original)
 		create_or_update_floating_window() -- Resize back to normal mode
 		render_buffers()
 	end
@@ -1379,14 +1511,32 @@ function M.list(opts)
 				update_display()
 				vim.schedule(handle_input)
 			elseif state.list_mode_selected_index ~= nil then
-				-- Clear list mode selection (first ESC)
+				-- Clear list mode selection (first ESC) - cleanup preview
+				if config.preview and config.preview.enabled then
+					if config.preview.mode == "current" then
+						if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
+							pcall(vim.api.nvim_set_current_buf, state.preview_origin_buf)
+						end
+					elseif config.preview.mode == "float" then
+						if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
+							pcall(vim.api.nvim_win_close, state.preview_float_win, true)
+						end
+						state.preview_float_win = nil
+					elseif config.preview.mode == "last_window" then
+						if state.preview_origin_win and vim.api.nvim_win_is_valid(state.preview_origin_win) then
+							if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
+								pcall(vim.api.nvim_win_set_buf, state.preview_origin_win, state.preview_origin_buf)
+							end
+						end
+					end
+				end
 				state.list_mode_selected_index = nil
 				state.last_selected_buffer_id = nil
 				update_display()
 				vim.schedule(handle_input)
 			else
 				-- Exit list mode entirely (second ESC)
-				leave()
+				leave(true)
 			end
 			return
 		end
@@ -1411,6 +1561,10 @@ function M.list(opts)
 					if state.filter_selected_index < 1 then
 						state.filter_selected_index = num_results
 					end
+					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+					if selected_buffer then
+						update_preview(selected_buffer.id)
+					end
 					update_display()
 				end
 				vim.schedule(handle_input)
@@ -1433,6 +1587,10 @@ function M.list(opts)
 					if state.filter_selected_index > num_results then
 						state.filter_selected_index = 1
 					end
+					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+					if selected_buffer then
+						update_preview(selected_buffer.id)
+					end
 					update_display()
 				end
 				vim.schedule(handle_input)
@@ -1449,13 +1607,13 @@ function M.list(opts)
 					local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
 					if selected_buffer then
 						if type(state.list_action) == "function" then
-							state.list_action(selected_buffer, leave)
+							state.list_action(selected_buffer, function() leave(false) end)
 						elseif state.list_action == "open" then
 							vim.api.nvim_set_current_buf(selected_buffer.id)
-							leave()
+							leave(false)
 						elseif state.list_action == "close" then
 							vim.api.nvim_buf_delete(selected_buffer.id, { force = false })
-							leave()
+							leave(false)
 						end
 					end
 				end
@@ -1467,6 +1625,15 @@ function M.list(opts)
 				if #state.filter_input > 0 then
 					state.filter_input = state.filter_input:sub(1, -2)
 					state.filter_selected_index = 1
+					local buffers = get_buffer_list()
+					local display_paths = get_display_paths(buffers)
+					local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+					if #filtered_indices > 0 then
+						local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+						if selected_buffer then
+							update_preview(selected_buffer.id)
+						end
+					end
 					update_display()
 				end
 				vim.schedule(handle_input)
@@ -1484,6 +1651,15 @@ function M.list(opts)
 				if char_str:match("[%w%s%p]") then
 					state.filter_input = state.filter_input .. char_str
 					state.filter_selected_index = 1
+					local buffers = get_buffer_list()
+					local display_paths = get_display_paths(buffers)
+					local filtered_indices = apply_fuzzy_filter(buffers, display_paths)
+					if #filtered_indices > 0 then
+						local selected_buffer = buffers[filtered_indices[state.filter_selected_index]]
+						if selected_buffer then
+							update_preview(selected_buffer.id)
+						end
+					end
 					update_display()
 					vim.schedule(handle_input)
 					return
@@ -1507,13 +1683,24 @@ function M.list(opts)
 			local buffers = get_buffer_list()
 			if #buffers > 0 then
 				if state.list_mode_selected_index == nil then
-					state.list_mode_selected_index = #buffers
-				else
-					state.list_mode_selected_index = state.list_mode_selected_index == 1 and #buffers
-						or state.list_mode_selected_index - 1
+					-- Find current buffer index
+					local current_buf = vim.api.nvim_get_current_buf()
+					for idx, buffer in ipairs(buffers) do
+						if buffer.id == current_buf then
+							state.list_mode_selected_index = idx
+							break
+						end
+					end
+					if state.list_mode_selected_index == nil then
+						state.list_mode_selected_index = #buffers
+					end
 				end
+				-- Move selection up
+				state.list_mode_selected_index = state.list_mode_selected_index == 1 and #buffers
+					or state.list_mode_selected_index - 1
 				-- Store selected buffer ID for persistence
 				state.last_selected_buffer_id = buffers[state.list_mode_selected_index].id
+				update_preview(buffers[state.list_mode_selected_index].id)
 				update_display()
 			end
 			vim.schedule(handle_input)
@@ -1529,12 +1716,23 @@ function M.list(opts)
 			local buffers = get_buffer_list()
 			if #buffers > 0 then
 				if state.list_mode_selected_index == nil then
-					state.list_mode_selected_index = 1
-				else
-					state.list_mode_selected_index = (state.list_mode_selected_index % #buffers) + 1
+					-- Find current buffer index
+					local current_buf = vim.api.nvim_get_current_buf()
+					for idx, buffer in ipairs(buffers) do
+						if buffer.id == current_buf then
+							state.list_mode_selected_index = idx
+							break
+						end
+					end
+					if state.list_mode_selected_index == nil then
+						state.list_mode_selected_index = 1
+					end
 				end
+				-- Move selection down
+				state.list_mode_selected_index = (state.list_mode_selected_index % #buffers) + 1
 				-- Store selected buffer ID for persistence
 				state.last_selected_buffer_id = buffers[state.list_mode_selected_index].id
+				update_preview(buffers[state.list_mode_selected_index].id)
 				update_display()
 			end
 			vim.schedule(handle_input)
@@ -1548,13 +1746,13 @@ function M.list(opts)
 				local selected_buffer = buffers[state.list_mode_selected_index]
 				if selected_buffer then
 					if type(state.list_action) == "function" then
-						state.list_action(selected_buffer, leave)
+						state.list_action(selected_buffer, function() leave(false) end)
 					elseif state.list_action == "open" then
 						vim.api.nvim_set_current_buf(selected_buffer.id)
-						leave()
+						leave(false)
 					elseif state.list_action == "close" then
 						vim.api.nvim_buf_delete(selected_buffer.id, { force = false })
-						leave()
+						leave(false)
 					end
 				end
 			end
@@ -1580,7 +1778,7 @@ function M.list(opts)
 			-- Always close the current active buffer
 			local current_buf = vim.api.nvim_get_current_buf()
 			vim.api.nvim_buf_delete(current_buf, { force = false })
-			leave()
+			leave(false)
 			return
 		end
 
@@ -1605,18 +1803,18 @@ function M.list(opts)
 			if #matches == 1 then
 				if type(state.list_action) == "function" then
 					-- Custom function action
-					state.list_action(matches[1], leave)
+					state.list_action(matches[1], function() leave(false) end)
 				elseif state.list_action == "open" then
 					vim.api.nvim_set_current_buf(matches[1].id)
-					leave()
+					leave(false)
 				elseif state.list_action == "close" then
 					vim.api.nvim_buf_delete(matches[1].id, { force = false })
-					leave()
+					leave(false)
 				end
 				return
 			elseif #matches == 0 then
 				-- No matches, exit list mode
-				leave()
+				leave(true)
 				return
 			end
 
@@ -1625,7 +1823,7 @@ function M.list(opts)
 			vim.schedule(handle_input)
 		else
 			-- Invalid character, exit list mode
-			leave()
+			leave(true)
 		end
 	end
 

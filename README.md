@@ -96,6 +96,7 @@ return {
                 label = { link = "Comment" },
                 filter_selected = { link = "Statement" },
                 filter_title = { link = "Comment" },
+                list_selected = { link = "Statement" },
 			},
 		})
 		sticks.show()
@@ -120,8 +121,11 @@ require("buffer-sticks").setup({
   label = { show = "list" },       -- Label display: "always", "list", or "never"
   list = {
     show = { "filename", "space", "label" }, -- List mode display options
+    active_indicator = "•",       -- Symbol for selected item in list mode (arrow navigation)
     keys = {
       close_buffer = "<C-q>",      -- Key to close buffer in list mode
+      move_up = "<Up>",           -- Key to move selection up in list mode
+      move_down = "<Down>",       -- Key to move selection down in list mode
     },
     filter = {
       title = "➜ ",                -- Filter prompt title when input is not empty
@@ -153,6 +157,7 @@ require("buffer-sticks").setup({
     label = { fg = "#aaaaaa", italic = true },
     filter_selected = { fg = "#bbbbbb", italic = true },
     filter_title = { fg = "#aaaaaa", italic = true },
+    list_selected = { fg = "#bbbbbb", italic = true },
   }
 })
 ```
@@ -197,35 +202,40 @@ List mode allows you to quickly navigate to or close buffers by typing their fir
 
 **Navigate to buffers:**
 1. Call `BufferSticks.list({ action = "open" })` or `BufferSticks.jump()`
-2. Type the first character of the buffer you want to jump to
-3. If multiple buffers match, continue typing more characters
-4. Press `/` (configurable) to enter filter mode for fuzzy search
-5. Press `Ctrl-Q` (configurable) to close the current active buffer
-6. Press `Esc` or `Ctrl-C` to cancel
+2. Selection starts at the currently active buffer
+3. Use `Up`/`Down` arrows (configurable) to navigate through buffers
+4. Type the first character of the buffer you want to jump to
+5. If multiple buffers match, continue typing more characters
+6. Press `/` (configurable) to enter filter mode for fuzzy search
+7. Press `Ctrl-Q` (configurable) to close the current active buffer
+8. Press `Esc` or `Ctrl-C` to cancel
 
 **Close buffers:**
 1. Call `BufferSticks.list({ action = "close" })` or `BufferSticks.close()`
-2. Type the first character of the buffer you want to close
-3. If multiple buffers match, continue typing more characters
-4. Press `/` (configurable) to enter filter mode for fuzzy search
-5. Press `Ctrl-Q` (configurable) to close the current active buffer
-6. Press `Esc` or `Ctrl-C` to cancel
+2. Selection starts at the currently active buffer
+3. Use `Up`/`Down` arrows (configurable) to navigate through buffers
+4. Type the first character of the buffer you want to close
+5. If multiple buffers match, continue typing more characters
+6. Press `/` (configurable) to enter filter mode for fuzzy search
+7. Press `Ctrl-Q` (configurable) to close the current active buffer
+8. Press `Esc` or `Ctrl-C` to cancel
 
 **Filter mode:**
 1. While in list mode, press `/` (configurable) to enter filter mode
 2. Type to fuzzy search through buffers in real-time
 3. Use `Up`/`Down` arrows (configurable) to navigate filtered results
 4. Press `Enter` to select the highlighted buffer
-5. Press `Esc` to exit filter mode back to list mode
+5. Press `Esc` to exit filter mode back to list mode (previous selection is restored)
 
 **Custom action function (buffer picker):**
 1. Call `BufferSticks.list({ action = function(buffer, leave) ... end })`
-2. Type the first character to select a buffer
-3. If multiple buffers match, continue typing more characters
-4. When a match is found, your function is called with:
+2. Selection starts at the currently active buffer
+3. Use `Up`/`Down` arrows or type the first character to select a buffer
+4. If multiple buffers match, continue typing more characters
+5. When a match is found (by typing) or when you press `Enter` (with arrow selection), your function is called with:
    - `buffer`: The selected buffer info (with `id`, `name`, `label`, etc.)
    - `leave`: Function to call when you're done to exit list mode
-5. You control when to exit by calling `leave()`
+6. You control when to exit by calling `leave()`
 
 **Label Display Options:**
 - `label = { show = "always" }` - Always show buffer name labels
@@ -256,6 +266,7 @@ highlights = {
   label = { fg = "#aaaaaa", italic = true },
   filter_selected = { fg = "#bbbbbb", italic = true },
   filter_title = { fg = "#aaaaaa", italic = true },
+  list_selected = { fg = "#bbbbbb", italic = true },
 }
 ```
 
@@ -272,6 +283,7 @@ highlights = {
   label = { link = "Comment" },
   filter_selected = { link = "Statement" },
   filter_title = { link = "Comment" },
+  list_selected = { link = "Statement" },
 }
 ```
 

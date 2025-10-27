@@ -353,5 +353,5 @@ highlights = {
 - `hide()` - Hide buffer sticks
 - `list(opts)` - Enter list mode with action ("open", "close", or custom function)
 - `jump()` - Enter list mode for quick buffer navigation (alias for `list({ action = "open" })`)
-- `is_visible()`: Returns the visibility status.
+- `is_visible()` - Returns the visibility status
 - `close()` - Enter list mode to close buffers (alias for `list({ action = "close" })`)

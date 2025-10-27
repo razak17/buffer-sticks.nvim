@@ -235,7 +235,10 @@ List mode allows you to quickly navigate to or close buffers by typing their fir
 7. Press `Ctrl-Q` (configurable) to close the current active buffer
 8. Press `Esc` or `Ctrl-C` to cancel
 
-**Filter mode:**
+## Filter mode
+
+Filter buffers using fuzzy matching:
+
 1. While in list mode, press `/` (configurable) to enter filter mode
 2. Type to fuzzy search through buffers in real-time
 3. Use `Up`/`Down` arrows (configurable) to navigate filtered results
@@ -350,4 +353,5 @@ highlights = {
 - `hide()` - Hide buffer sticks
 - `list(opts)` - Enter list mode with action ("open", "close", or custom function)
 - `jump()` - Enter list mode for quick buffer navigation (alias for `list({ action = "open" })`)
+- `is_visible()`: Returns the visibility status.
 - `close()` - Enter list mode to close buffers (alias for `list({ action = "close" })`)

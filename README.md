@@ -201,6 +201,9 @@ BufferSticks.jump()
 -- Alias for closing buffers (same as list with action="close")
 BufferSticks.close()
 
+-- Check if buffer list is visible
+local visible = BufferSticks.is_visible()
+
 -- Custom action function (buffer picker)
 BufferSticks.list({
   action = function(buffer, leave)

@@ -1851,6 +1851,12 @@ function M.toggle()
 	end
 end
 
+---Check if the buffer list is visible
+---@return boolean Whether the buffer list is visible
+function M.is_visible()
+	return state.visible
+end
+
 ---Setup the buffer sticks plugin with user configuration
 ---@param opts? BufferSticksConfig User configuration options to override defaults
 function M.setup(opts)
@@ -2080,16 +2086,11 @@ function M.setup(opts)
 		toggle = M.toggle,
 		show = M.show,
 		hide = M.hide,
+		is_visible = M.is_visible,
 		list = M.list,
 		jump = M.jump,
 		close = M.close,
 	}
-end
-
----Check if the buffer list is visible
----@return boolean Whether the buffer list is visible
-function M.is_visible()
-	return state.visible
 end
 
 return M

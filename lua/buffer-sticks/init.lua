@@ -2086,5 +2086,11 @@ function M.setup(opts)
 	}
 end
 
+---Check if the buffer list is visible
+---@return boolean Whether the buffer list is visible
+function M.is_visible()
+	return state.visible
+end
+
 return M
 -- vim:noet:ts=4:sts=4:sw=4:

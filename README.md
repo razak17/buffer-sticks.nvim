@@ -150,7 +150,7 @@ require("buffer-sticks").setup({
       width = 0.5,                     -- Width as fraction of screen (0.0 to 1.0)
       height = 0.8,                    -- Height as fraction of screen (0.0 to 1.0)
       border = "single",               -- Border style: "none", "single", "double", "rounded", "solid", "shadow"
-      title = nil,                     -- Window title (string or nil)
+      title = nil,                     -- Window title: nil/true = filename, false = no title, "string" = custom (default: nil/filename)
       title_pos = "center",            -- Title position: "left", "center", "right"
       footer = nil,                    -- Window footer (string or nil)
       footer_pos = "center",           -- Footer position: "left", "center", "right"
@@ -282,7 +282,7 @@ Buffer preview shows the content of the selected buffer while navigating in list
   - Configurable position: `"right"`, `"left"`, or `"below"`
   - Configurable size as fraction of screen
   - Customizable border, title, and footer
-  - Default: right side, 50% width, 80% height, single border
+  - Default: right side, 50% width, 80% height, single border, filename as title
 
 - **`"current"`** - Switches buffer in the current window
   - Shows immediate preview as you navigate
@@ -304,13 +304,18 @@ preview = {
     width = 0.5,         -- 0.0 to 1.0 (fraction of screen)
     height = 0.8,        -- 0.0 to 1.0 (fraction of screen)
     border = "rounded",  -- "none", "single", "double", "rounded", "solid", "shadow"
-    title = "Preview",   -- Window title (optional)
+    title = nil,         -- nil/true = show filename (default), false = no title, "string" = custom title
     title_pos = "center", -- "left", "center", "right"
     footer = nil,        -- Window footer (optional)
     footer_pos = "center", -- "left", "center", "right"
   },
 }
 ```
+
+**Title options:**
+- `title = nil` or `title = true` - Shows the buffer filename (default behavior)
+- `title = false` - No title displayed
+- `title = " Custom "` - Shows custom text
 
 ### Highlight Options
 

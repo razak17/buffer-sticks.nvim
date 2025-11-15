@@ -199,6 +199,21 @@ local state = {
 ---@field buftypes? string[] List of buftypes to exclude from buffer sticks (e.g., "terminal", "help", "quickfix")
 ---@field names? string[] List of buffer name patterns to exclude (supports lua patterns)
 
+---@class BufferSticksPreviewFloat
+---@field position? "left"|"right"|"below" Position of the preview window (default: "right")
+---@field width? number Width as fraction of screen (default: 0.5)
+---@field height? number Height as fraction of screen (default: 0.8)
+---@field border? string Border style (default: "single")
+---@field title? string|boolean Title text: nil/true = filename, false = no title, string = custom text (default: nil/filename)
+---@field title_pos? "left"|"center"|"right" Title position (default: "center")
+---@field footer? string Footer text (default: nil)
+---@field footer_pos? "left"|"center"|"right" Footer position (default: "center")
+
+---@class BufferSticksPreview
+---@field enabled? boolean Whether preview is enabled (default: true)
+---@field mode? "float"|"current"|"last_window" Preview mode (default: "float")
+---@field float? BufferSticksPreviewFloat Float window configuration
+
 ---@class BufferSticksConfig
 ---@field offset BufferSticksOffset Position offset for fine-tuning
 ---@field padding BufferSticksPadding Padding inside the window
@@ -214,6 +229,7 @@ local state = {
 ---@field label? BufferSticksLabel Label display configuration
 ---@field list? BufferSticksList List mode configuration
 ---@field filter? BufferSticksFilter Filter configuration for excluding buffers
+---@field preview? BufferSticksPreview Preview configuration
 ---@field highlights table<string, BufferSticksHighlights> Highlight groups for active/inactive/label states
 local config = {
 	offset = { x = 0, y = 0 },
@@ -1336,8 +1352,17 @@ local function create_preview_float(buffer_id)
 		zindex = 9,
 	}
 
-	if preview_config.title then
-		win_config.title = preview_config.title
+	-- Handle title configuration: nil/true = filename, false = no title, string = custom
+	if preview_config.title ~= false then
+		local title_text
+		if type(preview_config.title) == "string" then
+			title_text = preview_config.title
+		else
+			-- Default: show filename
+			local buf_name = vim.api.nvim_buf_get_name(buffer_id)
+			title_text = buf_name ~= "" and vim.fn.fnamemodify(buf_name, ":t") or "[No Name]"
+		end
+		win_config.title = " " .. title_text .. " "
 		win_config.title_pos = preview_config.title_pos or "center"
 	end
 

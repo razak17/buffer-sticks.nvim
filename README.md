@@ -8,8 +8,8 @@ Elegant buffer indicator and picker.
 [![Lua](https://img.shields.io/badge/Lua-blue.svg?style=for-the-badge&logo=lua)](http://www.lua.org)
 
 
-<!-- Demo source: https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89  -->
-https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89
+<!-- Demo source: https://github.com/user-attachments/assets/0b59c7dc-77b1-4e1e-ac48-16d47dd87b49 -->
+https://github.com/user-attachments/assets/0b59c7dc-77b1-4e1e-ac48-16d47dd87b49
 
 </div>
 

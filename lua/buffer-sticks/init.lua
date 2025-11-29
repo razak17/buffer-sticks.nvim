@@ -1535,32 +1535,8 @@ function M.list(opts)
 				state.filter_selected_index = 1
 				update_display()
 				vim.schedule(handle_input)
-			elseif state.list_mode_selected_index ~= nil then
-				-- Clear list mode selection (first ESC) - cleanup preview
-				if config.preview and config.preview.enabled then
-					if config.preview.mode == "current" then
-						if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
-							pcall(vim.api.nvim_set_current_buf, state.preview_origin_buf)
-						end
-					elseif config.preview.mode == "float" then
-						if state.preview_float_win and vim.api.nvim_win_is_valid(state.preview_float_win) then
-							pcall(vim.api.nvim_win_close, state.preview_float_win, true)
-						end
-						state.preview_float_win = nil
-					elseif config.preview.mode == "last_window" then
-						if state.preview_origin_win and vim.api.nvim_win_is_valid(state.preview_origin_win) then
-							if state.preview_origin_buf and vim.api.nvim_buf_is_valid(state.preview_origin_buf) then
-								pcall(vim.api.nvim_win_set_buf, state.preview_origin_win, state.preview_origin_buf)
-							end
-						end
-					end
-				end
-				state.list_mode_selected_index = nil
-				state.last_selected_buffer_id = nil
-				update_display()
-				vim.schedule(handle_input)
 			else
-				-- Exit list mode entirely (second ESC)
+				-- Exit list mode entirely
 				leave(true)
 			end
 			return

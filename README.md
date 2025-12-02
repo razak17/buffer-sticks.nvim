@@ -363,3 +363,7 @@ highlights = {
 - `jump()` - Enter list mode for quick buffer navigation (alias for `list({ action = "open" })`)
 - `is_visible()` - Returns the visibility status
 - `close()` - Enter list mode to close buffers (alias for `list({ action = "close" })`)
+
+## Contributing
+
+PRs are welcome! If you have ideas or find bugs, [open an issue](https://github.com/ahkohd/buffer-sticks.nvim/issues).

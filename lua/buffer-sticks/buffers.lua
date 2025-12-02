@@ -162,6 +162,11 @@ function M.get_buffer_list()
 						should_include = false
 						break
 					end
+					-- Fallback: detect terminal by name pattern (for unloaded session-restored buffers)
+					if bt == "terminal" and buf_name:match("^term://") then
+						should_include = false
+						break
+					end
 				end
 			end
 

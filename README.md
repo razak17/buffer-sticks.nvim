@@ -2,14 +2,14 @@
 
 # buffer-sticks.nvim
 
-A neovim plugin that displays a vertical indicator showing open buffers and doubles as a customizable buffer picker.
+Elegant buffer indicator and picker.
 
 [![Neovim](https://img.shields.io/badge/Neovim%200.10+-green.svg?style=for-the-badge&logo=neovim)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Lua-blue.svg?style=for-the-badge&logo=lua)](http://www.lua.org)
 
 
-<!-- Demo source: https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89  -->
-https://github.com/user-attachments/assets/7936371a-cb8e-452f-8c08-e1907e1f1b89
+<!-- Demo source: https://github.com/user-attachments/assets/8f2b4abe-07c1-4d52-9a58-ea1fa4c13bb1 -->
+https://github.com/user-attachments/assets/8f2b4abe-07c1-4d52-9a58-ea1fa4c13bb1
 
 </div>
 
@@ -363,3 +363,7 @@ highlights = {
 - `jump()` - Enter list mode for quick buffer navigation (alias for `list({ action = "open" })`)
 - `is_visible()` - Returns the visibility status
 - `close()` - Enter list mode to close buffers (alias for `list({ action = "close" })`)
+
+## Contributing
+
+PRs are welcome! If you have ideas or find bugs, [open an issue](https://github.com/ahkohd/buffer-sticks.nvim/issues).
